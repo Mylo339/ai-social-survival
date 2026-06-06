@@ -30,6 +30,17 @@ const mimeTypes = {
   ".svg": "image/svg+xml",
 };
 
+const publicFiles = new Set([
+  "index.html",
+  "styles.css",
+  "app.js",
+  "privacy.html",
+  "terms.html",
+  "manifest.webmanifest",
+  "sw.js",
+  "icon.svg",
+]);
+
 const securityHeaders = {
   "Content-Security-Policy":
     "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; media-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'",
@@ -350,6 +361,11 @@ async function handleAiTurn(request, response) {
 async function serveStatic(url, response) {
   const pathname = url.pathname === "/" ? "/index.html" : decodeURIComponent(url.pathname);
   const relativePath = pathname.replace(/^\/+/, "");
+  if (!publicFiles.has(relativePath)) {
+    send(response, 404, "Not found", "text/plain; charset=utf-8");
+    return;
+  }
+
   const safePath = normalize(join(root, relativePath));
   const relation = relative(root, safePath);
 

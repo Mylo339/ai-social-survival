@@ -52,6 +52,9 @@ try {
   for (const asset of ["styles.css", "app.js", "privacy.html", "terms.html", "manifest.webmanifest", "sw.js", "icon.svg"]) {
     assert.equal((await fetch(`${origin}/${asset}`)).status, 200, `${asset} should be served`);
   }
+  for (const privateAsset of ["local-server.mjs", "README.md", ".env.example", "data/admin-token.txt"]) {
+    assert.equal((await fetch(`${origin}/${privateAsset}`)).status, 404, `${privateAsset} should not be public`);
+  }
 
   const status = await (await fetch(`${origin}/api/status`)).json();
   assert.equal(status.mode, "local-coach");
