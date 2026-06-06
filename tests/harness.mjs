@@ -141,7 +141,7 @@ export class MockSpeechRecognition {
   }
 }
 
-export async function createHarness({ voice = false } = {}) {
+export async function createHarness({ voice = false, location = {}, fetch: fetchMock } = {}) {
   const document = new FakeDocument();
   const localStorage = new FakeStorage();
   const runTimer = (callback) => {
@@ -152,6 +152,7 @@ export async function createHarness({ voice = false } = {}) {
   const context = {
     console,
     document,
+    URLSearchParams,
     navigator: {
       clipboard: {
         async writeText(text) {
@@ -164,9 +165,12 @@ export async function createHarness({ voice = false } = {}) {
       webkitSpeechRecognition: voice ? MockSpeechRecognition : undefined,
       localStorage,
       location: {
-        protocol: "file:",
-        hostname: "",
+        protocol: location.protocol || "file:",
+        hostname: location.hostname || "",
+        pathname: location.pathname || "/",
+        search: location.search || "",
       },
+      innerWidth: location.innerWidth || 1280,
       scrollTo() {},
       confirm() {
         return true;
@@ -175,6 +179,7 @@ export async function createHarness({ voice = false } = {}) {
     },
     setTimeout: runTimer,
   };
+  if (fetchMock) context.fetch = fetchMock;
 
   context.globalThis = context;
   const appSource = await readFile(new URL("../app.js", import.meta.url), "utf8");

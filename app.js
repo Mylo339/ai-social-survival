@@ -1,6 +1,7 @@
 const STORAGE_KEY = "socialSurvival.alpha.v1";
 const MAX_HISTORY = 40;
 const MAX_PHRASES = 80;
+const ANALYTICS_ID_PREFIX = "ssv";
 
 const toneModes = [
   {
@@ -680,6 +681,11 @@ const defaultProfile = {
     mode: "practice",
     analyticsConsent: false,
   },
+  analytics: {
+    visitorId: "",
+    firstSeenAt: "",
+    lastSource: "",
+  },
   history: [],
   phrases: [],
   feedbackOutbox: [],
@@ -703,14 +709,24 @@ const state = {
   voiceBaseText: "",
   isBusy: false,
   sessionSaved: false,
+  practiceId: "",
+  sessionStartedAt: 0,
   engine: "local",
   apiAvailable: false,
+  appOpenTracked: false,
   lastAiResponse: "",
   lastEvaluation: null,
   activeView: "home",
 };
 
 let profile = loadProfile();
+const analyticsRuntime = {
+  sessionId: createAnalyticsId("session"),
+  source: cleanAnalyticsSource(getQueryParam("src") || getQueryParam("utm_source") || getQueryParam("ref")),
+  campaign: cleanAnalyticsSource(getQueryParam("campaign") || getQueryParam("utm_campaign")),
+  landingPath: (window.location?.pathname || "/").slice(0, 120),
+};
+ensureAnalyticsIdentity();
 state.mode = profile.settings.mode || "practice";
 
 const views = {
@@ -756,6 +772,7 @@ function loadProfile() {
       ...parsed,
       settings: { ...defaultProfile.settings, ...(parsed.settings || {}) },
       streak: { ...defaultProfile.streak, ...(parsed.streak || {}) },
+      analytics: { ...defaultProfile.analytics, ...(parsed.analytics || {}) },
       history: Array.isArray(parsed.history) ? parsed.history : [],
       phrases: Array.isArray(parsed.phrases) ? parsed.phrases : [],
       feedbackOutbox: Array.isArray(parsed.feedbackOutbox) ? parsed.feedbackOutbox : [],
@@ -771,6 +788,69 @@ function saveProfile() {
   } catch (error) {
     // The product remains usable when storage is unavailable.
   }
+}
+
+function ensureAnalyticsIdentity() {
+  let changed = false;
+  profile.analytics = { ...defaultProfile.analytics, ...(profile.analytics || {}) };
+  if (!profile.analytics.visitorId) {
+    profile.analytics.visitorId = createAnalyticsId("visitor");
+    changed = true;
+  }
+  if (!profile.analytics.firstSeenAt) {
+    profile.analytics.firstSeenAt = new Date().toISOString();
+    changed = true;
+  }
+  if (analyticsRuntime.source && profile.analytics.lastSource !== analyticsRuntime.source) {
+    profile.analytics.lastSource = analyticsRuntime.source;
+    changed = true;
+  }
+  if (changed) saveProfile();
+}
+
+function createAnalyticsId(scope) {
+  const random =
+    typeof crypto !== "undefined" && typeof crypto.getRandomValues === "function"
+      ? Array.from(crypto.getRandomValues(new Uint8Array(8)), (value) => value.toString(16).padStart(2, "0")).join("")
+      : Math.random().toString(36).slice(2, 14);
+  return `${ANALYTICS_ID_PREFIX}_${scope}_${Date.now().toString(36)}_${random}`;
+}
+
+function getQueryParam(name) {
+  try {
+    return new URLSearchParams(window.location?.search || "").get(name) || "";
+  } catch (error) {
+    return "";
+  }
+}
+
+function cleanAnalyticsSource(value) {
+  return typeof value === "string" ? value.replace(/[^a-z0-9_\-.]/gi, "").slice(0, 80) : "";
+}
+
+function getCurrentSource() {
+  return analyticsRuntime.source || profile.analytics?.lastSource || "direct";
+}
+
+function getViewportBucket() {
+  const width = Number(window.innerWidth || 0);
+  if (!width) return "unknown";
+  if (width < 640) return "phone";
+  if (width < 1024) return "tablet";
+  return "desktop";
+}
+
+function getAnalyticsContext() {
+  return {
+    visitorId: profile.analytics?.visitorId || "",
+    sessionId: analyticsRuntime.sessionId,
+    source: getCurrentSource(),
+    campaign: analyticsRuntime.campaign,
+    landingPath: analyticsRuntime.landingPath,
+    viewport: getViewportBucket(),
+    speechSupported: Boolean(SpeechRecognition),
+    consent: Boolean(profile.settings.analyticsConsent),
+  };
 }
 
 function showView(name) {
@@ -813,6 +893,12 @@ function renderHomeStats() {
     <div><strong>${profile.phrases.length}</strong><span>收藏表达</span></div>
   `;
   document.querySelector("#analyticsConsent").checked = Boolean(profile.settings.analyticsConsent);
+  const sourceNote = document.querySelector("#testerSourceNote");
+  if (sourceNote) {
+    const source = getCurrentSource();
+    sourceNote.hidden = source === "direct";
+    sourceNote.textContent = source === "direct" ? "" : `测试来源：${source}。勾选后会记录匿名使用漏斗，帮助我们判断这个版本是否真的好用。`;
+  }
 }
 
 function renderScenes() {
@@ -883,6 +969,8 @@ function startScene(sceneId) {
   state.answers = [];
   state.retryCounts = {};
   state.sessionSaved = false;
+  state.practiceId = createAnalyticsId("practice");
+  state.sessionStartedAt = Date.now();
   state.lastAiResponse = "";
   state.lastEvaluation = null;
   state.isBusy = false;
@@ -909,7 +997,13 @@ function startScene(sceneId) {
   updateEngineBadges();
   showView("chat");
   setVoiceStatus("可以打字，也可以点击 Speak 说英文。语音识别后会先进入输入框。");
-  trackEvent("scene_started", { scene: scene.id, mode: state.mode });
+  trackEvent("scene_started", {
+    practiceId: state.practiceId,
+    scene: scene.id,
+    category: scene.category,
+    difficulty: scene.difficulty,
+    mode: state.mode,
+  });
   window.setTimeout?.(() => messageInput.focus?.(), 150);
 }
 
@@ -1355,7 +1449,18 @@ function showResult() {
 
   saveSession(scene, scores, ending);
   showView("result");
-  trackEvent("scene_completed", { scene: scene.id, mode: state.mode, ending: ending.key });
+  trackEvent("scene_completed", {
+    practiceId: state.practiceId,
+    scene: scene.id,
+    category: scene.category,
+    difficulty: scene.difficulty,
+    mode: state.mode,
+    ending: ending.key,
+    durationMs: state.sessionStartedAt ? Date.now() - state.sessionStartedAt : 0,
+    turns: scene.turns.length,
+    socialHp: state.socialHp,
+    scores,
+  });
 }
 
 function buildEvidence(answers) {
@@ -1546,6 +1651,11 @@ async function copyShareText() {
   window.setTimeout?.(() => {
     button.textContent = "复制分享文案";
   }, 1200);
+  trackEvent("share_copied", {
+    practiceId: state.practiceId,
+    scene: state.currentScene?.id || "",
+    mode: state.mode,
+  });
 }
 
 function setupVoiceInput() {
@@ -1569,6 +1679,11 @@ function setupVoiceInput() {
     voiceButton.setAttribute("aria-pressed", "true");
     voiceButtonText.textContent = "Listening";
     setVoiceStatus("正在听。说完后文字会先进入输入框，不会自动发送。");
+    trackEvent("voice_started", {
+      practiceId: state.practiceId,
+      scene: state.currentScene?.id || "",
+      mode: state.mode,
+    });
   });
 
   recognition.addEventListener("result", (event) => {
@@ -1578,6 +1693,13 @@ function setupVoiceInput() {
     }
     messageInput.value = [state.voiceBaseText, transcript.trim()].filter(Boolean).join(" ");
     setVoiceStatus(transcript.trim() ? `我听到：${transcript.trim()}` : "继续说，我在听。");
+    if (transcript.trim()) {
+      trackEvent("voice_transcribed", {
+        practiceId: state.practiceId,
+        scene: state.currentScene?.id || "",
+        mode: state.mode,
+      });
+    }
   });
 
   recognition.addEventListener("end", () => {
@@ -1596,6 +1718,12 @@ function setupVoiceInput() {
     setVoiceStatus(getVoiceErrorMessage(event.error));
     voiceDiagnostics.textContent = getVoiceDiagnosticMessage(event.error);
     voiceDiagnostics.hidden = false;
+    trackEvent("voice_error", {
+      practiceId: state.practiceId,
+      scene: state.currentScene?.id || "",
+      mode: state.mode,
+      error: event.error || "unknown",
+    });
   });
 }
 
@@ -1666,6 +1794,7 @@ async function detectApiStatus() {
     state.engine = payload.aiEnabled ? "ai" : "local";
     updateEngineBadges();
     flushFeedbackOutbox();
+    trackAppOpened();
   } catch (error) {
     state.apiAvailable = false;
     state.engine = "local";
@@ -1693,6 +1822,12 @@ function openFeedback(category = "experience") {
   document.querySelector("#feedbackCategory").value = category;
   document.querySelector("#feedbackStatus").textContent = "";
   openDialog(feedbackDialog);
+  trackEvent("feedback_opened", {
+    practiceId: state.practiceId,
+    scene: state.currentScene?.id || "",
+    mode: state.mode,
+    category,
+  });
 }
 
 async function submitFeedback(event) {
@@ -1709,6 +1844,7 @@ async function submitFeedback(event) {
     sceneId: state.currentScene?.id || "",
     mode: state.mode,
     reportedResponse: category === "ai-response" ? state.lastAiResponse : "",
+    analytics: getAnalyticsContext(),
   };
   const status = document.querySelector("#feedbackStatus");
   status.textContent = "正在提交…";
@@ -1724,6 +1860,12 @@ async function submitFeedback(event) {
     status.textContent = "已收到，谢谢你帮我们把产品变准。";
     document.querySelector("#feedbackText").value = "";
     document.querySelector("#feedbackContact").value = "";
+    trackEvent("feedback_submitted", {
+      practiceId: state.practiceId,
+      scene: state.currentScene?.id || "",
+      mode: state.mode,
+      category,
+    });
   } catch (error) {
     profile.feedbackOutbox.push({ ...payload, createdAt: new Date().toISOString() });
     profile.feedbackOutbox = profile.feedbackOutbox.slice(-10);
@@ -1753,15 +1895,35 @@ async function flushFeedbackOutbox() {
 
 async function trackEvent(name, details = {}) {
   if (!profile.settings.analyticsConsent || !state.apiAvailable || typeof fetch !== "function") return;
+  const analytics = getAnalyticsContext();
   try {
     await fetch("/api/event", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, details }),
+      body: JSON.stringify({
+        name,
+        visitorId: analytics.visitorId,
+        sessionId: analytics.sessionId,
+        source: analytics.source,
+        campaign: analytics.campaign,
+        details: {
+          ...analytics,
+          ...details,
+        },
+      }),
     });
   } catch (error) {
     // Product events are best-effort and never block the experience.
   }
+}
+
+function trackAppOpened() {
+  if (state.appOpenTracked) return;
+  if (!profile.settings.analyticsConsent || !state.apiAvailable) return;
+  state.appOpenTracked = true;
+  trackEvent("app_opened", {
+    mode: state.mode,
+  });
 }
 
 function getDailyScene() {
@@ -1797,13 +1959,21 @@ document.querySelector("#brandButton").addEventListener("click", () => showView(
 document.querySelector("#analyticsConsent").addEventListener("change", (event) => {
   profile.settings.analyticsConsent = Boolean(event.target.checked);
   saveProfile();
+  if (profile.settings.analyticsConsent) {
+    trackEvent("analytics_consent_enabled", {
+      mode: state.mode,
+    });
+    trackAppOpened();
+  }
 });
 document.querySelector("#practiceButton").addEventListener("click", () => {
   setMode("practice");
+  trackEvent("mode_selected", { mode: "practice" });
   showView("scenes");
 });
 document.querySelector("#challengeButton").addEventListener("click", () => {
   setMode("challenge");
+  trackEvent("mode_selected", { mode: "challenge" });
   showView("scenes");
 });
 document.querySelector("#dailyChallengeButton").addEventListener("click", () => startScene(getDailyScene().id));
@@ -1851,6 +2021,7 @@ document.querySelectorAll?.("[data-mode]")?.forEach((button) => {
 sceneFilter.addEventListener("change", (event) => {
   state.sceneFilter = event.target.value in categoryLabels ? event.target.value : "all";
   renderScenes();
+  trackEvent("scene_filter_changed", { filter: state.sceneFilter, mode: state.mode });
 });
 
 sceneGrid.addEventListener("click", (event) => {

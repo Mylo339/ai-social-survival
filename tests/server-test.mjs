@@ -23,7 +23,7 @@ const port = await reservePort();
 const origin = `http://127.0.0.1:${port}`;
 const child = spawn(process.execPath, ["local-server.mjs"], {
   cwd: projectRoot,
-  env: { ...process.env, PORT: String(port), DATA_DIRECTORY: dataDirectory },
+  env: { ...process.env, PORT: String(port), DATA_DIRECTORY: dataDirectory, ADMIN_TOKEN: "test-token" },
   stdio: "ignore",
 });
 
@@ -60,10 +60,40 @@ try {
   const feedback = await fetch(`${origin}/api/feedback`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ category: "experience", text: "Server test feedback", sceneId: "coffee", mode: "practice" }),
+    body: JSON.stringify({
+      category: "experience",
+      text: "Server test feedback",
+      sceneId: "coffee",
+      mode: "practice",
+      analytics: { visitorId: "visitor-test", sessionId: "session-test", source: "server_test" },
+    }),
   });
   assert.equal(feedback.status, 201);
   assert.ok((await readFile(join(dataDirectory, "feedback.ndjson"), "utf8")).includes("Server test feedback"));
+
+  const validEvent = await fetch(`${origin}/api/event`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      name: "scene_completed",
+      visitorId: "visitor-test",
+      sessionId: "session-test",
+      source: "server_test",
+      details: {
+        scene: "coffee",
+        category: "daily",
+        mode: "practice",
+        ending: "good",
+        durationMs: 120000,
+        viewport: "desktop",
+        scores: { goal: 90, relevance: 88, relationship: 84, naturalness: 82, overall: 86 },
+      },
+    }),
+  });
+  assert.equal(validEvent.status, 201);
+  const events = await readFile(join(dataDirectory, "events.ndjson"), "utf8");
+  assert.ok(events.includes("visitor-test"));
+  assert.ok(!events.includes("Server test feedback"), "product events should not contain feedback or chat text");
 
   const invalidEvent = await fetch(`${origin}/api/event`, {
     method: "POST",
@@ -71,6 +101,18 @@ try {
     body: JSON.stringify({ name: "unexpected_event" }),
   });
   assert.equal(invalidEvent.status, 400);
+
+  const blockedReport = await fetch(`${origin}/api/admin/report`);
+  assert.equal(blockedReport.status, 401);
+
+  const report = await fetch(`${origin}/api/admin/report`, {
+    headers: { Authorization: "Bearer test-token" },
+  });
+  assert.equal(report.status, 200);
+  const reportPayload = await report.json();
+  assert.equal(reportPayload.totals.uniqueVisitors, 1);
+  assert.equal(reportPayload.totals.sceneCompletions, 1);
+  assert.equal(reportPayload.bySource.server_test, 1);
 
   const offlineAi = await fetch(`${origin}/api/turn`, {
     method: "POST",
@@ -82,7 +124,7 @@ try {
   assert.equal((await fetch(`${origin}/missing-page`)).status, 404);
   assert.equal((await fetch(`${origin}/api/status`, { method: "DELETE" })).status, 405);
 
-  console.log("Server test passed: assets, security headers, status, feedback, validation, and offline AI fallback work.");
+  console.log("Server test passed: assets, security headers, status, feedback, analytics events, admin report, validation, and offline AI fallback work.");
 } finally {
   child.kill();
   await new Promise((resolve) => child.once("exit", resolve));

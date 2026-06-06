@@ -1,6 +1,7 @@
 import { appendFile, mkdir, readFile, stat } from "node:fs/promises";
 import { createServer } from "node:http";
 import { extname, join, normalize, relative } from "node:path";
+import { buildUsageReport, readNdjson } from "./scripts/report-utils.mjs";
 
 const root = new URL(".", import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1");
 const port = Number(process.env.PORT || 4177);
@@ -10,6 +11,7 @@ const aiApiKey = process.env.AI_API_KEY || "";
 const aiModel = process.env.AI_MODEL || "";
 const aiEnabled = Boolean(aiEndpoint && aiApiKey && aiModel);
 const dataDirectory = process.env.DATA_DIRECTORY || join(root, "data");
+const adminToken = process.env.ADMIN_TOKEN || "";
 const rateLimits = new Map();
 
 const mimeTypes = {
@@ -57,6 +59,50 @@ async function readJson(request, maxBytes = 24_000) {
 
 function cleanString(value, maxLength) {
   return typeof value === "string" ? value.replace(/\0/g, "").trim().slice(0, maxLength) : "";
+}
+
+function cleanNumber(value, min = 0, max = 100_000_000) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return 0;
+  return Math.min(max, Math.max(min, Math.round(number)));
+}
+
+function cleanBoolean(value) {
+  return Boolean(value);
+}
+
+function cleanScores(scores) {
+  const source = scores && typeof scores === "object" ? scores : {};
+  return {
+    goal: cleanNumber(source.goal, 0, 100),
+    relevance: cleanNumber(source.relevance, 0, 100),
+    relationship: cleanNumber(source.relationship, 0, 100),
+    naturalness: cleanNumber(source.naturalness, 0, 100),
+    overall: cleanNumber(source.overall, 0, 100),
+    completedTurns: cleanNumber(source.completedTurns, 0, 20),
+    retries: cleanNumber(source.retries, 0, 50),
+  };
+}
+
+function cleanEventDetails(details) {
+  const source = details && typeof details === "object" ? details : {};
+  return {
+    practiceId: cleanString(source.practiceId, 120),
+    scene: cleanString(source.scene, 60),
+    category: cleanString(source.category, 40),
+    difficulty: cleanString(source.difficulty, 30),
+    mode: cleanString(source.mode, 20),
+    ending: cleanString(source.ending, 20),
+    filter: cleanString(source.filter, 40),
+    error: cleanString(source.error, 60),
+    landingPath: cleanString(source.landingPath, 240),
+    viewport: cleanString(source.viewport, 20),
+    speechSupported: cleanBoolean(source.speechSupported),
+    durationMs: cleanNumber(source.durationMs, 0, 1000 * 60 * 60),
+    turns: cleanNumber(source.turns, 0, 20),
+    socialHp: cleanNumber(source.socialHp, 0, 100),
+    scores: cleanScores(source.scores),
+  };
 }
 
 function containsUnsafeContent(text) {
@@ -108,6 +154,16 @@ async function handleFeedback(request, response) {
     sceneId: cleanString(payload.sceneId, 60),
     mode: cleanString(payload.mode, 20),
     reportedResponse: cleanString(payload.reportedResponse, 1200),
+    analytics:
+      payload.analytics && typeof payload.analytics === "object"
+        ? {
+            visitorId: cleanString(payload.analytics.visitorId, 120),
+            sessionId: cleanString(payload.analytics.sessionId, 120),
+            source: cleanString(payload.analytics.source, 80),
+            campaign: cleanString(payload.analytics.campaign, 80),
+            viewport: cleanString(payload.analytics.viewport, 20),
+          }
+        : {},
   };
 
   if (!record.text) {
@@ -120,13 +176,26 @@ async function handleFeedback(request, response) {
 }
 
 async function handleEvent(request, response) {
-  if (!allowRequest(request, 80)) {
+  if (!allowRequest(request, 140)) {
     send(response, 429, { error: "Too many requests" });
     return;
   }
 
-  const payload = await readJson(request, 8_000);
-  const allowedEvents = new Set(["scene_started", "scene_completed"]);
+  const payload = await readJson(request, 12_000);
+  const allowedEvents = new Set([
+    "app_opened",
+    "analytics_consent_enabled",
+    "mode_selected",
+    "scene_filter_changed",
+    "scene_started",
+    "scene_completed",
+    "share_copied",
+    "voice_started",
+    "voice_transcribed",
+    "voice_error",
+    "feedback_opened",
+    "feedback_submitted",
+  ]);
   const name = cleanString(payload.name, 40);
   if (!allowedEvents.has(name)) {
     send(response, 400, { error: "Unsupported event" });
@@ -137,13 +206,31 @@ async function handleEvent(request, response) {
   await appendRecord("events.ndjson", {
     createdAt: new Date().toISOString(),
     name,
-    details: {
-      scene: cleanString(details.scene, 60),
-      mode: cleanString(details.mode, 20),
-      ending: cleanString(details.ending, 20),
-    },
+    visitorId: cleanString(payload.visitorId || details.visitorId, 120),
+    sessionId: cleanString(payload.sessionId || details.sessionId, 120),
+    source: cleanString(payload.source || details.source, 80),
+    campaign: cleanString(payload.campaign || details.campaign, 80),
+    details: cleanEventDetails(details),
   });
   send(response, 201, { ok: true });
+}
+
+async function handleAdminReport(request, response) {
+  if (!adminToken) {
+    send(response, 404, { error: "Admin report is not configured" });
+    return;
+  }
+
+  const auth = request.headers.authorization || "";
+  const token = auth.startsWith("Bearer ") ? auth.slice(7).trim() : "";
+  if (token !== adminToken) {
+    send(response, 401, { error: "Unauthorized" });
+    return;
+  }
+
+  const events = await readNdjson(dataDirectory, "events.ndjson");
+  const feedback = await readNdjson(dataDirectory, "feedback.ndjson");
+  send(response, 200, buildUsageReport(events, feedback));
 }
 
 async function handleAiTurn(request, response) {
@@ -263,6 +350,10 @@ const server = createServer(async (request, response) => {
     }
     if (request.method === "POST" && url.pathname === "/api/event") {
       await handleEvent(request, response);
+      return;
+    }
+    if (request.method === "GET" && url.pathname === "/api/admin/report") {
+      await handleAdminReport(request, response);
       return;
     }
     if (request.method === "POST" && url.pathname === "/api/turn") {

@@ -52,8 +52,29 @@ AI_MODEL=model-name
 - 对话、历史和收藏默认保存在浏览器本机。
 - 只有页面显示“在线 AI”时，当前一轮文字和场景信息才会发送到配置的 AI 服务。
 - 反馈只在用户主动提交时发送。
-- 只有用户在首页主动勾选同意时，产品事件才会发送；事件只包含场景、模式和结局，不包含对话正文或持久用户 ID。
+- 只有用户在首页主动勾选同意时，产品事件才会发送；事件包含匿名测试编号、来源参数、设备类型、场景、模式、用时、结局和教练估算分数，不包含对话正文、录音、姓名、邮箱或手机号。
 - 反馈与事件记录保存在 `data/`，该目录已被 Git 忽略。
+
+## 朋友测试数据
+
+分享链接时可以加来源参数，方便区分渠道：
+
+```text
+https://ai-social-survival.onrender.com/?src=friend_wechat
+https://ai-social-survival.onrender.com/?src=xiaohongshu_test
+```
+
+测试者勾选首页的数据同意后，服务端会把匿名事件写入 `data/events.ndjson`。查看本地报告：
+
+```powershell
+npm run report
+```
+
+部署环境可以设置 `ADMIN_TOKEN`，然后用受保护接口读取 JSON 报告：
+
+```powershell
+Invoke-RestMethod -Uri "https://your-domain.example/api/admin/report" -Headers @{ Authorization = "Bearer YOUR_ADMIN_TOKEN" }
+```
 
 公开测试前应再次核对 [privacy.html](privacy.html) 与实际部署方式完全一致。
 

@@ -13,6 +13,24 @@ Use Render as a Docker web service:
 
 The free Render web-service plan is suitable for Web Beta testing, but it can sleep after inactivity and its local filesystem is not persistent. Before meaningful feedback collection, configure persistent storage or replace NDJSON feedback files with a managed database.
 
+## Friend beta analytics
+
+The beta can record opt-in anonymous product events to `data/events.ndjson`. Share source-tagged links so each channel can be measured:
+
+```text
+https://ai-social-survival.onrender.com/?src=friend_wechat
+https://ai-social-survival.onrender.com/?src=uoa_friend_test
+```
+
+Set `ADMIN_TOKEN` in the hosting dashboard to enable the protected report endpoint:
+
+```text
+GET /api/admin/report
+Authorization: Bearer YOUR_ADMIN_TOKEN
+```
+
+The report includes unique anonymous visitors, starts, completions, completion rate, average score, average duration, source breakdown and recent feedback. It does not include dialogue text or recordings.
+
 ## Optional online AI
 
 The site remains fully usable without online AI. To enable more flexible character replies, configure these server-side secrets in the hosting dashboard:

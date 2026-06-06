@@ -541,6 +541,19 @@ summary:focus-visible {
   accent-color: var(--ink);
 }
 
+.tester-source-note {
+  width: fit-content;
+  max-width: 600px;
+  margin-top: 10px;
+  padding: 9px 12px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface-soft);
+  color: var(--muted);
+  font-size: 0.72rem;
+  line-height: 1.5;
+}
+
 .hero-stage {
   position: relative;
   display: flex;
