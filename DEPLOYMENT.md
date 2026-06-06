@@ -50,9 +50,23 @@ AI_ENDPOINT=https://api.deepseek.com/chat/completions
 AI_API_KEY=your-deepseek-api-key
 AI_MODEL=deepseek-v4-flash
 AI_THINKING=disabled
+AI_TURN_RATE_LIMIT_PER_MINUTE=18
+FEEDBACK_RATE_LIMIT_PER_MINUTE=20
+EVENT_RATE_LIMIT_PER_MINUTE=140
 ```
 
 Keep the key in Render environment variables only. After enabling it, verify `/api/status` shows `online-ai`, then complete at least one practice and one challenge scene before sharing the build.
+
+`AI_API_KEY` and `ADMIN_TOKEN` are declared as unsynced placeholders in `render.yaml`; populate their values in the Render Dashboard, not in Git. If you use Render's `Add from .env` flow, remove any real key from the file immediately after the dashboard import.
+
+## Data retention
+
+Render's default service filesystem is ephemeral. For a real beta, either:
+
+- attach a persistent disk and set `DATA_DIRECTORY` to that mounted path, such as `/var/data`; or
+- replace the NDJSON files with a managed database before inviting a larger tester group.
+
+The `/api/status` response includes a non-secret storage hint so deployment checks can catch an unconfigured data directory before testing starts.
 
 ## Release verification
 

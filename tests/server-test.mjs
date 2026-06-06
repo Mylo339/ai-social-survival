@@ -56,6 +56,9 @@ try {
   const status = await (await fetch(`${origin}/api/status`)).json();
   assert.equal(status.mode, "local-coach");
   assert.equal(status.aiEnabled, false);
+  assert.equal(status.ai.providerConfigured, false);
+  assert.equal(status.ai.turnRateLimitPerMinute, 18);
+  assert.equal(status.storage.dataDirectoryConfigured, true);
 
   const feedback = await fetch(`${origin}/api/feedback`, {
     method: "POST",

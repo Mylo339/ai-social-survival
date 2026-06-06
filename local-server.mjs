@@ -12,7 +12,11 @@ const aiModel = process.env.AI_MODEL || "";
 const aiThinking = process.env.AI_THINKING || "";
 const aiEnabled = Boolean(aiEndpoint && aiApiKey && aiModel);
 const dataDirectory = process.env.DATA_DIRECTORY || join(root, "data");
+const dataDirectoryConfigured = Boolean(process.env.DATA_DIRECTORY);
 const adminToken = process.env.ADMIN_TOKEN || "";
+const feedbackRateLimit = readPositiveIntegerEnv("FEEDBACK_RATE_LIMIT_PER_MINUTE", 20, 1, 120);
+const eventRateLimit = readPositiveIntegerEnv("EVENT_RATE_LIMIT_PER_MINUTE", 140, 1, 400);
+const aiTurnRateLimit = readPositiveIntegerEnv("AI_TURN_RATE_LIMIT_PER_MINUTE", 18, 1, 80);
 const rateLimits = new Map();
 
 const mimeTypes = {
@@ -70,6 +74,12 @@ function cleanNumber(value, min = 0, max = 100_000_000) {
 
 function cleanBoolean(value) {
   return Boolean(value);
+}
+
+function readPositiveIntegerEnv(name, fallback, min, max) {
+  const value = Number(process.env[name]);
+  if (!Number.isFinite(value) || value <= 0) return fallback;
+  return Math.min(max, Math.max(min, Math.round(value)));
 }
 
 function cleanScores(scores) {
@@ -142,12 +152,23 @@ async function handleStatus(response) {
     ok: true,
     aiEnabled,
     mode: aiEnabled ? "online-ai" : "local-coach",
+    ai: {
+      providerConfigured: Boolean(aiEndpoint && aiModel),
+      model: aiModel || "",
+      turnRateLimitPerMinute: aiTurnRateLimit,
+    },
+    storage: {
+      dataDirectoryConfigured,
+      persistence: dataDirectoryConfigured
+        ? "depends-on-hosting-storage"
+        : "not-guaranteed-on-hosted-deploys",
+    },
     privacy: "User transcripts are only sent to the configured AI provider when aiEnabled is true.",
   });
 }
 
 async function handleFeedback(request, response) {
-  if (!allowRequest(request, 20)) {
+  if (!allowRequest(request, feedbackRateLimit)) {
     send(response, 429, { error: "Too many requests" });
     return;
   }
@@ -185,7 +206,7 @@ async function handleFeedback(request, response) {
 }
 
 async function handleEvent(request, response) {
-  if (!allowRequest(request, 140)) {
+  if (!allowRequest(request, eventRateLimit)) {
     send(response, 429, { error: "Too many requests" });
     return;
   }
@@ -248,7 +269,7 @@ async function handleAiTurn(request, response) {
     send(response, 503, { error: "Online AI is not configured" });
     return;
   }
-  if (!allowRequest(request, 30)) {
+  if (!allowRequest(request, aiTurnRateLimit)) {
     send(response, 429, { error: "Too many requests" });
     return;
   }

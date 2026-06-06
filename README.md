@@ -54,9 +54,11 @@ AI_ENDPOINT=https://api.deepseek.com/chat/completions
 AI_API_KEY=your-deepseek-api-key
 AI_MODEL=deepseek-v4-flash
 AI_THINKING=disabled
+AI_TURN_RATE_LIMIT_PER_MINUTE=18
 ```
 
 `AI_THINKING` 是可选项；只在目标供应商支持 DeepSeek/OpenAI 兼容的 thinking 参数时使用。为了角色扮演回复更快、更短，公开测试默认建议先用 `disabled`。
+`AI_TURN_RATE_LIMIT_PER_MINUTE` 用来控制同一访问来源每分钟最多触发多少次真实 AI 回复，公开测试阶段建议先保守一点。
 
 ## 数据与隐私
 
@@ -65,6 +67,7 @@ AI_THINKING=disabled
 - 反馈只在用户主动提交时发送。
 - 只有用户在首页主动勾选同意时，产品事件才会发送；事件包含匿名测试编号、来源参数、设备类型、场景、模式、用时、结局和教练估算分数，不包含对话正文、录音、姓名、邮箱或手机号。
 - 反馈与事件记录保存在 `data/`，该目录已被 Git 忽略。
+- Render 免费服务的文件系统会在重启或重新部署后丢失写入数据。正式收集测试数据前，需要给服务挂载持久磁盘并把 `DATA_DIRECTORY` 指到挂载目录，或改接正式数据库。
 
 ## 朋友测试数据
 

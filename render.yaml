@@ -8,3 +8,19 @@ services:
     envVars:
       - key: HOST
         value: 0.0.0.0
+      - key: AI_ENDPOINT
+        value: https://api.deepseek.com/chat/completions
+      - key: AI_MODEL
+        value: deepseek-v4-flash
+      - key: AI_THINKING
+        value: disabled
+      - key: AI_TURN_RATE_LIMIT_PER_MINUTE
+        value: 18
+      - key: FEEDBACK_RATE_LIMIT_PER_MINUTE
+        value: 20
+      - key: EVENT_RATE_LIMIT_PER_MINUTE
+        value: 140
+      - key: AI_API_KEY
+        sync: false
+      - key: ADMIN_TOKEN
+        sync: false
