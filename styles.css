@@ -1634,17 +1634,22 @@ footer div {
   }
 
   .topbar {
+    position: static;
     top: 7px;
+    align-items: stretch;
+    flex-direction: column;
+    gap: 7px;
+  }
+
+  .topnav {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    width: 100%;
   }
 
   .topnav button {
-    padding: 8px 9px;
-    font-size: 0.72rem;
-  }
-
-  .topnav button:nth-child(2),
-  .topnav button:nth-child(3) {
-    display: none;
+    padding: 8px 4px;
+    font-size: 0.7rem;
   }
 
   .alert-ticker div {
@@ -1744,10 +1749,6 @@ footer div {
 
   .brand small {
     font-size: 0.57rem;
-  }
-
-  .topnav button:nth-child(4) {
-    display: none;
   }
 
   .hero-stage {
