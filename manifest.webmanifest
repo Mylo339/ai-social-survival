@@ -1,0 +1,17 @@
+{
+  "name": "AI Social Survival",
+  "short_name": "Social Survival",
+  "description": "给中国留学生的真实英语社交场景练习。",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#f6f3ed",
+  "theme_color": "#183153",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

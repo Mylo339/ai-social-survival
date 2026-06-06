@@ -1,0 +1,15 @@
+{
+  "name": "ai-social-survival",
+  "version": "0.3.0-beta",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node local-server.mjs",
+    "test": "node tests/smoke-test.mjs && node tests/interaction-test.mjs && node tests/rubric-test.mjs && node tests/ui-test.mjs && node tests/production-test.mjs && node tests/journey-test.mjs && node tests/accessibility-test.mjs && node tests/server-test.mjs",
+    "check": "node --check app.js && node --check local-server.mjs",
+    "report": "node scripts/alpha-report.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

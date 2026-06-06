@@ -1,0 +1,422 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="给中国留学生的真实英语社交场景练习。练表达、看语气影响、复盘真实沟通目标。"
+    />
+    <meta name="theme-color" content="#183153" />
+    <meta property="og:title" content="AI Social Survival" />
+    <meta property="og:description" content="别背句子，先活过一个真实英语社交场景。" />
+    <title>AI Social Survival</title>
+    <link rel="icon" href="icon.svg" type="image/svg+xml" />
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <a class="skip-link" href="#mainContent">跳到主要内容</a>
+    <div class="ambient ambient-one"></div>
+    <div class="ambient ambient-two"></div>
+
+    <div class="app-shell">
+      <header class="topbar">
+        <button class="brand" id="brandButton" type="button" aria-label="返回首页">
+          <span class="brand-mark">SS</span>
+          <span>
+            <strong>Social Survival</strong>
+            <small>Web Beta</small>
+          </span>
+        </button>
+        <nav class="topnav" aria-label="主要导航">
+          <button type="button" data-nav-view="scenes">场景</button>
+          <button type="button" data-nav-view="progress">记录</button>
+          <button type="button" data-nav-view="phrases">收藏</button>
+          <button type="button" id="feedbackButton">反馈</button>
+        </nav>
+      </header>
+      <div class="alert-ticker" aria-hidden="true">
+        <div>
+          <span>8 个奥克兰真实生活场景</span>
+          <span>练习模式与挑战模式</span>
+          <span>先沟通清楚，再追求完美英语</span>
+        </div>
+      </div>
+
+      <main id="mainContent">
+        <section class="view hero-view is-active" id="homeView">
+          <div class="hero-copy">
+            <div class="hero-case-mark" aria-hidden="true">
+              <span>LIFE ENGLISH GUIDE</span>
+              <strong>BETA</strong>
+            </div>
+            <div class="status-row">
+              <span class="eyebrow">给中国留学生的英语社交生存游戏</span>
+              <span class="engine-badge" id="homeEngineBadge">正在检测教练模式</span>
+            </div>
+            <h1>别背标准答案。<br /><em>练会接住现场。</em></h1>
+            <p class="hero-text">
+              在奥克兰常见生活场景里自由开口。角色会根据你真正说的内容回应，
+              教练会解释你是否完成沟通目标、是否符合语境，以及哪一句可以更自然。
+            </p>
+
+            <div class="mode-launcher" aria-label="选择开始方式">
+              <button class="launch-card practice" id="practiceButton" type="button">
+                <span class="launch-number">01</span>
+                <strong>先练一遍</strong>
+                <small>有提示、语气实验和逐轮复盘</small>
+              </button>
+              <button class="launch-card challenge" id="challengeButton" type="button">
+                <span class="launch-number">02</span>
+                <strong>直接实战</strong>
+                <small>隐藏答案，结束后一次性揭晓</small>
+              </button>
+            </div>
+
+            <div class="hero-actions">
+              <button class="primary-button" id="dailyChallengeButton" type="button">开始今日挑战</button>
+              <button class="text-button" id="howItWorksButton" type="button">评分到底怎么看？</button>
+            </div>
+
+            <div class="home-stats" id="homeStats">
+              <div><strong>0</strong><span>完成场景</span></div>
+              <div><strong>0</strong><span>连续练习</span></div>
+              <div><strong>0</strong><span>收藏表达</span></div>
+            </div>
+            <label class="privacy-consent">
+              <input id="analyticsConsent" type="checkbox" />
+              <span>可选：发送不含对话正文或用户 ID 的场景开始/完成事件，帮助我们改善产品。</span>
+            </label>
+          </div>
+
+          <div class="hero-stage" aria-label="产品体验示例">
+            <div class="stage-topline">
+              <span>场景预览 · 室友沟通 · 10:45 PM</span>
+              <span class="signal-dot">LIVE</span>
+            </div>
+            <div class="incident-stamp" aria-hidden="true">CONTEXT<br />CHECK</div>
+            <div class="stage-message npc">
+              <span>Alex</span>
+              Hey, sorry, could you keep it down a bit?
+            </div>
+            <div class="stage-message user">
+              <span>You</span>
+              It's not that loud.
+            </div>
+            <div class="stage-reaction">
+              <span>关系影响</span>
+              <strong>意思清楚，但防御感较强</strong>
+              <p>你回应了噪音问题，但没有承认对方正受到影响。</p>
+              <div class="stage-thermometer" aria-hidden="true">
+                <i></i>
+                <b>38°</b>
+              </div>
+            </div>
+            <div class="stage-alt">
+              <span>更稳的说法</span>
+              <p>Sorry, I didn't realise it was carrying through the wall. I'll keep it down.</p>
+            </div>
+          </div>
+        </section>
+
+        <section class="view scenes-view" id="scenesView">
+          <div class="section-heading split-heading">
+            <div>
+              <p class="eyebrow">场景练习</p>
+              <h2>选择一个真实生活场景。</h2>
+            </div>
+            <div class="scene-controls">
+              <label class="scene-filter-label">
+                场景类别
+                <select id="sceneFilter">
+                  <option value="all">全部场景</option>
+                  <option value="daily">日常生活</option>
+                  <option value="study">学业沟通</option>
+                  <option value="work">工作场景</option>
+                  <option value="home">居住沟通</option>
+                </select>
+              </label>
+              <div class="mode-switch" aria-label="练习模式">
+                <button type="button" data-mode="practice">练习模式</button>
+                <button type="button" data-mode="challenge">挑战模式</button>
+              </div>
+            </div>
+          </div>
+          <div class="mode-explainer" id="modeExplainer"></div>
+          <div class="scene-grid" id="sceneGrid"></div>
+        </section>
+
+        <section class="view chat-view" id="chatView">
+          <div class="chat-toolbar">
+            <button class="back-button" id="backToScenesButton" type="button">← 换场景</button>
+            <div class="engine-status">
+              <span class="engine-badge" id="chatEngineBadge">本地教练</span>
+              <button class="text-button subtle" id="reportResponseButton" type="button" hidden>举报回复</button>
+            </div>
+          </div>
+
+          <div class="chat-layout">
+            <aside class="scenario-panel">
+              <div class="case-strip" aria-hidden="true">当前练习场景</div>
+              <p class="eyebrow" id="sceneTag"></p>
+              <h2 id="sceneTitle"></h2>
+              <p id="sceneDescription"></p>
+
+              <div class="mission-card">
+                <span>这场要做到</span>
+                <p id="missionText"></p>
+                <span>最容易踩坑</span>
+                <p id="riskText"></p>
+              </div>
+
+              <div class="progress-card">
+                <div class="progress-label">
+                  <span>Progress</span>
+                  <strong id="turnCounter">0/0</strong>
+                </div>
+                <div class="meter-track" aria-hidden="true">
+                  <div class="meter-fill" id="progressFill"></div>
+                </div>
+              </div>
+
+              <div class="hp-card">
+                <div class="progress-label">
+                  <span>关系温度</span>
+                  <strong id="socialHpValue">100</strong>
+                </div>
+                <div class="hp-track" aria-hidden="true">
+                  <div class="hp-fill" id="socialHpFill"></div>
+                </div>
+                <p id="coldAlert">气氛目前还流动。</p>
+              </div>
+
+              <details class="subtext-card">
+                <summary>对方真正关心什么</summary>
+                <p id="subtextText"></p>
+              </details>
+            </aside>
+
+            <div class="chat-card">
+              <div class="chat-header">
+                <div>
+                  <p class="eyebrow">COMMS CHANNEL · 你正在和谁说话</p>
+                  <h3 id="npcName">AI Role</h3>
+                  <span id="npcRole"></span>
+                </div>
+                <div class="chat-status-stack">
+                  <span class="mood-card" id="npcMood">Friendly</span>
+                  <span class="mode-chip" id="activeModeChip">练习模式</span>
+                </div>
+              </div>
+
+              <div class="tone-lab" id="toneLab">
+                <div class="tone-lab-copy">
+                  <strong>语气实验室</strong>
+                  <span id="toneHint">选择你想练的表达风格。评分仍然只看你真正说出的句子。</span>
+                </div>
+                <div class="tone-grid" id="toneGrid"></div>
+              </div>
+
+              <div class="chat-log" id="chatLog" aria-live="polite"></div>
+
+              <div class="turn-coach" id="turnCoach" hidden>
+                <div class="turn-coach-heading">
+                  <div>
+                    <span>这一轮为什么这样判断</span>
+                    <strong id="turnCoachSummary"></strong>
+                  </div>
+                  <button class="icon-button" id="closeTurnCoachButton" type="button" aria-label="收起逐轮反馈">×</button>
+                </div>
+                <div class="mini-rubric" id="miniRubric"></div>
+                <p id="turnCoachReason"></p>
+                <div class="coach-suggestion">
+                  <span>可以这样说</span>
+                  <p id="turnSuggestion"></p>
+                  <button class="text-button" id="saveTurnPhraseButton" type="button">收藏这句</button>
+                </div>
+              </div>
+
+              <form class="chat-form" id="chatForm">
+                <label class="sr-only" for="messageInput">用英文回复</label>
+                <button class="voice-button" id="voiceButton" type="button" aria-pressed="false">
+                  <span class="voice-dot"></span>
+                  <span id="voiceButtonText">Speak</span>
+                </button>
+                <textarea
+                  id="messageInput"
+                  rows="2"
+                  maxlength="500"
+                  autocomplete="off"
+                  placeholder="用英文自由回复，或者点击 Speak 开口说"
+                  required
+                ></textarea>
+                <button class="primary-button send-button" type="submit">发送</button>
+              </form>
+
+              <div class="input-meta">
+                <p class="voice-status" id="voiceStatus">可以打字，也可以点击 Speak 说英文。</p>
+                <button class="text-button subtle" id="voiceHelpButton" type="button">语音诊断</button>
+              </div>
+              <div class="voice-diagnostics" id="voiceDiagnostics" hidden></div>
+
+              <div class="quick-replies" id="quickReplies"></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="view result-view" id="resultView">
+          <div class="result-card">
+            <div class="result-kicker">
+              <p class="eyebrow">场景复盘</p>
+              <span class="estimate-label">教练估算 · 非考试分数</span>
+            </div>
+            <h2 id="resultTitle">你活下来了。</h2>
+            <p class="result-summary" id="resultSummary"></p>
+
+            <div class="ending-card">
+              <span>本场结局</span>
+              <strong id="endingTitle"></strong>
+              <p id="endingText"></p>
+            </div>
+
+            <div class="rubric-grid" id="resultRubric"></div>
+
+            <details class="rubric-details" open>
+              <summary>这些判断根据什么？</summary>
+              <p>
+                系统逐轮检查你是否回应了当前问题、是否完成沟通目标、表达是否清楚，以及语气对关系的影响。
+                数字用于帮助比较练习，不代表正式英语等级。
+              </p>
+              <div id="evidenceList"></div>
+            </details>
+
+            <div class="feedback-grid">
+              <article>
+                <span class="card-label">保留这个习惯</span>
+                <h3 id="strongestPoint"></h3>
+                <p id="strongestPointDetail"></p>
+              </article>
+              <article>
+                <span class="card-label">下一次只改这一件事</span>
+                <h3 id="priorityFix"></h3>
+                <p id="priorityFixDetail"></p>
+              </article>
+            </div>
+
+            <div class="phrase-card">
+              <span>带走一句</span>
+              <p id="betterPhrase"></p>
+              <button class="text-button" id="saveResultPhraseButton" type="button">收藏到表达库</button>
+            </div>
+
+            <div class="next-challenge">
+              <span>下一次挑战</span>
+              <p id="nextChallenge"></p>
+            </div>
+
+            <div class="share-card">
+              <span>分享文案</span>
+              <p id="shareLine"></p>
+            </div>
+
+            <div class="result-actions">
+              <button class="primary-button" id="tryAnotherButton" type="button">再来一个场景</button>
+              <button class="secondary-button" id="retryButton" type="button">重玩本场景</button>
+              <button class="secondary-button" id="copyShareButton" type="button">复制分享文案</button>
+            </div>
+          </div>
+        </section>
+
+        <section class="view progress-view" id="progressView">
+          <div class="section-heading split-heading">
+            <div>
+              <p class="eyebrow">你的练习记录</p>
+              <h2>看见自己真正变稳的地方。</h2>
+            </div>
+            <button class="secondary-button" id="clearHistoryButton" type="button">清除本机记录</button>
+          </div>
+          <div class="progress-overview" id="progressOverview"></div>
+          <div class="history-list" id="historyList"></div>
+        </section>
+
+        <section class="view phrases-view" id="phrasesView">
+          <div class="section-heading">
+            <p class="eyebrow">表达收藏夹</p>
+            <h2>下次现场能想起来，才算真的学会。</h2>
+          </div>
+          <div class="phrasebook-list" id="phrasebookList"></div>
+        </section>
+      </main>
+
+      <footer>
+        <span>AI Social Survival · Web Beta</span>
+        <div>
+          <a href="privacy.html">隐私说明</a>
+          <a href="terms.html">使用条款</a>
+          <button class="text-button subtle" id="footerFeedbackButton" type="button">提交反馈</button>
+        </div>
+      </footer>
+    </div>
+
+    <dialog class="modal" id="feedbackDialog">
+      <form method="dialog" class="modal-card" id="feedbackForm">
+        <div class="modal-heading">
+          <div>
+            <p class="eyebrow">帮助我们改得更准</p>
+            <h2>提交反馈</h2>
+          </div>
+          <button class="icon-button" id="closeFeedbackButton" type="button" aria-label="关闭反馈窗口">×</button>
+        </div>
+        <label>
+          反馈类型
+          <select id="feedbackCategory">
+            <option value="experience">体验问题</option>
+            <option value="evaluation">评分不准确</option>
+            <option value="ai-response">AI 回复问题</option>
+            <option value="voice">语音问题</option>
+            <option value="idea">功能建议</option>
+          </select>
+        </label>
+        <label>
+          发生了什么？
+          <textarea id="feedbackText" rows="5" maxlength="2000" required></textarea>
+        </label>
+        <label>
+          联系方式（可选）
+          <input id="feedbackContact" maxlength="200" placeholder="邮箱或其他联系方式" />
+        </label>
+        <p class="form-note">提交时只发送你填写的内容和当前场景，不发送录音。</p>
+        <p class="form-status" id="feedbackStatus" role="status"></p>
+        <div class="modal-actions">
+          <button class="secondary-button" id="cancelFeedbackButton" type="button">取消</button>
+          <button class="primary-button" id="submitFeedbackButton" type="submit">提交反馈</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog class="modal" id="methodDialog">
+      <div class="modal-card">
+        <div class="modal-heading">
+          <div>
+            <p class="eyebrow">我们怎么判断</p>
+            <h2>不是考语法，是看现场。</h2>
+          </div>
+          <button class="icon-button" id="closeMethodButton" type="button" aria-label="关闭说明">×</button>
+        </div>
+        <div class="method-grid">
+          <article><strong>沟通目标</strong><p>你是否真正完成这一步需要做的事情。</p></article>
+          <article><strong>回应相关</strong><p>你是否接住了对方刚刚问的问题。</p></article>
+          <article><strong>关系影响</strong><p>语气是否符合人物关系和当前压力。</p></article>
+          <article><strong>表达自然</strong><p>句子是否清楚、简洁，并接近真实口语。</p></article>
+        </div>
+        <p class="form-note">
+          本地模式使用透明规则进行教练估算；接入在线 AI 后，角色回复会更自由，但最终建议仍应由真实使用者验证。
+        </p>
+        <button class="primary-button" id="methodStartButton" type="button">明白，开始练</button>
+      </div>
+    </dialog>
+
+    <script src="app.js"></script>
+  </body>
+</html>

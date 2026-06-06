@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: ai-social-survival
+    runtime: docker
+    plan: free
+    region: singapore
+    healthCheckPath: /api/status
+    envVars:
+      - key: HOST
+        value: 0.0.0.0
