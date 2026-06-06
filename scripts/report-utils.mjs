@@ -35,6 +35,17 @@ function dateKey(createdAt) {
   return typeof createdAt === "string" ? createdAt.slice(0, 10) : "unknown";
 }
 
+function countTags(feedback) {
+  return feedback.reduce((counts, item) => {
+    const tags = Array.isArray(item.tags) ? item.tags : [];
+    tags.forEach((tag) => {
+      const key = tag || "unknown";
+      counts[key] = (counts[key] || 0) + 1;
+    });
+    return counts;
+  }, {});
+}
+
 export function buildUsageReport(events, feedback) {
   const starts = events.filter((event) => event.name === "scene_started");
   const completions = events.filter((event) => event.name === "scene_completed");
@@ -77,12 +88,16 @@ export function buildUsageReport(events, feedback) {
     eventsByName: countBy(events, (event) => event.name),
     sceneBreakdown,
     feedbackCategories: countBy(feedback, (item) => item.category),
+    feedbackRatings: countBy(feedback, (item) => item.rating),
+    feedbackTags: countTags(feedback),
     recentFeedback: feedback
       .slice(-8)
       .reverse()
       .map((item) => ({
         createdAt: item.createdAt,
         category: item.category,
+        rating: item.rating || "",
+        tags: Array.isArray(item.tags) ? item.tags : [],
         sceneId: item.sceneId,
         mode: item.mode,
         source: item.analytics?.source || "unknown",

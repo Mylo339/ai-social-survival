@@ -53,6 +53,19 @@ const rubricMeta = {
   },
 };
 
+const quickFeedbackLabels = {
+  useful: "有用，想再练",
+  okay: "一般，但能懂",
+  confusing: "没太懂/不准",
+};
+
+const quickFeedbackTagLabels = {
+  scenario: "场景更真实",
+  scoring: "评分更准",
+  voice: "语音更稳",
+  "more-scenes": "更多场景",
+};
+
 const categoryLabels = {
   daily: "日常生活",
   study: "学业沟通",
@@ -711,6 +724,11 @@ const state = {
   sessionSaved: false,
   practiceId: "",
   sessionStartedAt: 0,
+  resultScores: null,
+  resultEnding: null,
+  quickFeedbackRating: "",
+  quickFeedbackTags: [],
+  quickFeedbackSubmitted: false,
   engine: "local",
   apiAvailable: false,
   appOpenTracked: false,
@@ -1446,6 +1464,9 @@ function showResult() {
   document.querySelector("#betterPhrase").textContent = scene.betterPhrase;
   document.querySelector("#nextChallenge").textContent = scene.nextChallenge;
   document.querySelector("#shareLine").textContent = buildShareLine(scene, scores, ending);
+  state.resultScores = scores;
+  state.resultEnding = ending;
+  resetQuickFeedback();
 
   saveSession(scene, scores, ending);
   showView("result");
@@ -1504,6 +1525,110 @@ function getEnding(scene, scores) {
 
 function buildShareLine(scene, scores, ending) {
   return `我刚在 AI Social Survival 挑战了「${scene.title}」：${ending.title}。沟通目标 ${scores.goal}，回应相关 ${scores.relevance}，关系影响 ${scores.relationship}。这是教练估算，不是考试分数。`;
+}
+
+function resetQuickFeedback() {
+  state.quickFeedbackRating = "";
+  state.quickFeedbackTags = [];
+  state.quickFeedbackSubmitted = false;
+  const card = document.querySelector("#quickFeedbackCard");
+  card.querySelectorAll?.("[data-quick-feedback], [data-quick-feedback-tag]")?.forEach((button) => {
+    button.classList.remove("is-selected");
+    button.disabled = false;
+  });
+  document.querySelector("#quickFeedbackText").value = "";
+  document.querySelector("#quickFeedbackSubmitButton").disabled = false;
+  document.querySelector("#quickFeedbackStatus").textContent = "";
+}
+
+function toggleQuickFeedbackTag(tag) {
+  if (!(tag in quickFeedbackTagLabels)) return;
+  const selected = state.quickFeedbackTags.includes(tag);
+  state.quickFeedbackTags = selected
+    ? state.quickFeedbackTags.filter((item) => item !== tag)
+    : [...state.quickFeedbackTags, tag];
+  document.querySelectorAll?.("[data-quick-feedback-tag]")?.forEach((button) => {
+    button.classList.toggle("is-selected", state.quickFeedbackTags.includes(button.dataset.quickFeedbackTag));
+  });
+}
+
+async function submitQuickFeedback(rating = "") {
+  const selectedRating = rating || state.quickFeedbackRating;
+  const scene = state.currentScene;
+  const note = document.querySelector("#quickFeedbackText").value.trim();
+  const tags = [...state.quickFeedbackTags];
+  const status = document.querySelector("#quickFeedbackStatus");
+  if (!scene) return;
+  if (!selectedRating && !note && !tags.length) {
+    status.textContent = "点一个评价，或者写一句补充就可以提交。";
+    return;
+  }
+
+  if (rating) {
+    state.quickFeedbackRating = rating;
+    document.querySelectorAll?.("[data-quick-feedback]")?.forEach((button) => {
+      button.classList.toggle("is-selected", button.dataset.quickFeedback === rating);
+      button.disabled = true;
+    });
+  }
+
+  const label = quickFeedbackLabels[selectedRating] || "补充反馈";
+  const tagLabels = tags.map((tag) => quickFeedbackTagLabels[tag]).filter(Boolean);
+  const scores = state.resultScores || {};
+  const payload = {
+    category: rating ? "quick-result" : "quick-result-note",
+    rating: selectedRating,
+    tags,
+    text: [
+      `Quick feedback: ${label}`,
+      tagLabels.length ? `Tags: ${tagLabels.join(", ")}` : "",
+      note ? `Note: ${note}` : "",
+      `Scene: ${scene.title}`,
+      Number.isFinite(scores.overall) ? `Overall score: ${scores.overall}` : "",
+    ]
+      .filter(Boolean)
+      .join("\n"),
+    contact: "",
+    sceneId: scene.id,
+    mode: state.mode,
+    reportedResponse: "",
+    analytics: getAnalyticsContext(),
+  };
+
+  status.textContent = "正在提交…";
+  document.querySelector("#quickFeedbackSubmitButton").disabled = true;
+
+  try {
+    if (!state.apiAvailable) throw new Error("offline");
+    const response = await fetch("/api/feedback", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    if (!response.ok) throw new Error("submit failed");
+    state.quickFeedbackSubmitted = true;
+    status.textContent = rating ? "已收到。想补一句也可以继续写。" : "补充已收到，谢谢。";
+    if (!rating) {
+      document.querySelector("#quickFeedbackText").value = "";
+      state.quickFeedbackTags = [];
+      document.querySelectorAll?.("[data-quick-feedback-tag]")?.forEach((button) => button.classList.remove("is-selected"));
+    }
+    trackEvent("quick_feedback_submitted", {
+      practiceId: state.practiceId,
+      scene: scene.id,
+      mode: state.mode,
+      rating: selectedRating,
+      tags: tags.join(","),
+    });
+  } catch (error) {
+    profile.feedbackOutbox.push({ ...payload, createdAt: new Date().toISOString() });
+    profile.feedbackOutbox = profile.feedbackOutbox.slice(-10);
+    saveProfile();
+    state.quickFeedbackSubmitted = true;
+    status.textContent = "当前离线，反馈已保存在本机；连接测试服务器后会自动重试。";
+  } finally {
+    document.querySelector("#quickFeedbackSubmitButton").disabled = false;
+  }
 }
 
 function saveSession(scene, scores, ending) {
@@ -2005,6 +2130,16 @@ document.querySelector("#closeFeedbackButton").addEventListener("click", () => c
 document.querySelector("#cancelFeedbackButton").addEventListener("click", () => closeDialog(feedbackDialog));
 reportResponseButton.addEventListener("click", () => openFeedback("ai-response"));
 document.querySelector("#feedbackForm").addEventListener("submit", submitFeedback);
+document.querySelector("#quickFeedbackCard").addEventListener("click", (event) => {
+  const ratingButton = event.target.closest("[data-quick-feedback]");
+  if (ratingButton) {
+    submitQuickFeedback(ratingButton.dataset.quickFeedback);
+    return;
+  }
+  const tagButton = event.target.closest("[data-quick-feedback-tag]");
+  if (tagButton) toggleQuickFeedbackTag(tagButton.dataset.quickFeedbackTag);
+});
+document.querySelector("#quickFeedbackSubmitButton").addEventListener("click", () => submitQuickFeedback());
 document.querySelector("#voiceHelpButton").addEventListener("click", () => {
   voiceDiagnostics.hidden = !voiceDiagnostics.hidden;
 });

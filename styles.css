@@ -1321,7 +1321,8 @@ textarea {
 .ending-card,
 .phrase-card,
 .next-challenge,
-.share-card {
+.share-card,
+.quick-feedback-card {
   margin: 20px 0;
   padding: 18px;
   border-radius: var(--radius-small);
@@ -1331,7 +1332,8 @@ textarea {
 .ending-card span,
 .phrase-card span,
 .next-challenge span,
-.share-card span {
+.share-card span,
+.quick-feedback-card span {
   display: block;
   margin-bottom: 5px;
   color: var(--muted);
@@ -1352,6 +1354,78 @@ textarea {
   margin: 5px 0 0;
   color: var(--muted);
   font-size: 0.82rem;
+}
+
+.quick-feedback-card {
+  border: 1px solid rgba(232, 107, 80, 0.22);
+  background:
+    linear-gradient(135deg, rgba(232, 107, 80, 0.1), rgba(255, 255, 255, 0.7)),
+    var(--surface-soft);
+}
+
+.quick-feedback-card h3 {
+  margin-bottom: 4px;
+}
+
+.quick-feedback-card p {
+  margin-bottom: 14px;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.quick-feedback-options,
+.quick-feedback-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.quick-feedback-options button,
+.quick-feedback-tags button {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--ink);
+  font-size: 0.74rem;
+}
+
+.quick-feedback-options button {
+  padding: 10px 13px;
+  font-weight: 750;
+}
+
+.quick-feedback-tags button {
+  padding: 8px 11px;
+  color: var(--muted);
+}
+
+.quick-feedback-options button:hover,
+.quick-feedback-tags button:hover,
+.quick-feedback-options button.is-selected,
+.quick-feedback-tags button.is-selected {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.quick-feedback-options button:disabled,
+#quickFeedbackSubmitButton:disabled {
+  opacity: 0.62;
+  cursor: not-allowed;
+}
+
+.quick-feedback-note {
+  display: block;
+  margin: 12px 0 10px;
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
+.quick-feedback-note textarea {
+  width: 100%;
+  margin-top: 6px;
+  background: #fff;
 }
 
 #resultView[data-ending="good"] .ending-card {

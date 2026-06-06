@@ -204,6 +204,8 @@ globalThis.__appTest = {
   renderProgress,
   renderPhrasebook,
   copyShareText,
+  submitQuickFeedback,
+  toggleQuickFeedbackTag,
   clearHistory,
   removePhrase,
   submitFeedback

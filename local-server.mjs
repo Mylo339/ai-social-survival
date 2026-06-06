@@ -9,6 +9,7 @@ const host = process.env.HOST || "127.0.0.1";
 const aiEndpoint = process.env.AI_ENDPOINT || "";
 const aiApiKey = process.env.AI_API_KEY || "";
 const aiModel = process.env.AI_MODEL || "";
+const aiThinking = process.env.AI_THINKING || "";
 const aiEnabled = Boolean(aiEndpoint && aiApiKey && aiModel);
 const dataDirectory = process.env.DATA_DIRECTORY || join(root, "data");
 const adminToken = process.env.ADMIN_TOKEN || "";
@@ -84,6 +85,10 @@ function cleanScores(scores) {
   };
 }
 
+function cleanStringArray(value, maxItems = 8, maxLength = 40) {
+  return Array.isArray(value) ? value.slice(0, maxItems).map((item) => cleanString(item, maxLength)).filter(Boolean) : [];
+}
+
 function cleanEventDetails(details) {
   const source = details && typeof details === "object" ? details : {};
   return {
@@ -93,6 +98,8 @@ function cleanEventDetails(details) {
     difficulty: cleanString(source.difficulty, 30),
     mode: cleanString(source.mode, 20),
     ending: cleanString(source.ending, 20),
+    rating: cleanString(source.rating, 40),
+    tags: cleanString(source.tags, 160),
     filter: cleanString(source.filter, 40),
     error: cleanString(source.error, 60),
     landingPath: cleanString(source.landingPath, 240),
@@ -153,6 +160,8 @@ async function handleFeedback(request, response) {
     contact: cleanString(payload.contact, 200),
     sceneId: cleanString(payload.sceneId, 60),
     mode: cleanString(payload.mode, 20),
+    rating: cleanString(payload.rating, 40),
+    tags: cleanStringArray(payload.tags),
     reportedResponse: cleanString(payload.reportedResponse, 1200),
     analytics:
       payload.analytics && typeof payload.analytics === "object"
@@ -195,6 +204,7 @@ async function handleEvent(request, response) {
     "voice_error",
     "feedback_opened",
     "feedback_submitted",
+    "quick_feedback_submitted",
   ]);
   const name = cleanString(payload.name, 40);
   if (!allowedEvents.has(name)) {
@@ -279,21 +289,26 @@ async function handleAiTurn(request, response) {
     .filter(Boolean)
     .join("\n");
 
+  const providerRequestBody = {
+    model: aiModel,
+    temperature: 0.65,
+    max_tokens: 140,
+    messages: [
+      { role: "system", content: systemPrompt },
+      { role: "user", content: `Character asked: ${prompt}\nLearner replied: ${userText}` },
+    ],
+  };
+  if (["enabled", "disabled"].includes(aiThinking)) {
+    providerRequestBody.thinking = { type: aiThinking };
+  }
+
   const providerResponse = await fetch(aiEndpoint, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${aiApiKey}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({
-      model: aiModel,
-      temperature: 0.65,
-      max_tokens: 140,
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: `Character asked: ${prompt}\nLearner replied: ${userText}` },
-      ],
-    }),
+    body: JSON.stringify(providerRequestBody),
   });
 
   if (!providerResponse.ok) {

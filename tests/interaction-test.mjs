@@ -39,6 +39,15 @@ assert.equal(app.state.turnIndex, app.state.currentScene.turns.length);
 assert.ok(document.querySelector("#endingTitle").textContent.length > 0);
 assert.ok(document.querySelector("#evidenceList").innerHTML.includes("第 1 轮"));
 assert.ok(app.profile.history.length >= 1);
+assert.ok(document.querySelector("#quickFeedbackCard").selector, "quick feedback card should be available on result page");
+
+app.toggleQuickFeedbackTag("scoring");
+document.querySelector("#quickFeedbackText").value = "The score felt useful.";
+await app.submitQuickFeedback("useful");
+assert.equal(app.profile.feedbackOutbox.length, 1, "quick feedback should be saved locally while offline");
+assert.equal(app.profile.feedbackOutbox[0].rating, "useful");
+assert.equal(JSON.stringify(app.profile.feedbackOutbox[0].tags), JSON.stringify(["scoring"]));
+assert.ok(app.profile.feedbackOutbox[0].text.includes("Quick feedback"));
 
 app.savePhrase(document.querySelector("#betterPhrase").textContent);
 assert.equal(app.profile.phrases.length, 1);

@@ -321,6 +321,31 @@
               <p id="shareLine"></p>
             </div>
 
+            <div class="quick-feedback-card" id="quickFeedbackCard">
+              <div>
+                <span>3 秒反馈</span>
+                <h3>这次练习对你有用吗？</h3>
+                <p>点一下就会提交。只发送这个评价、当前场景和匿名来源，不发送你的对话原文。</p>
+              </div>
+              <div class="quick-feedback-options" aria-label="快速评价">
+                <button type="button" data-quick-feedback="useful">有用，想再练</button>
+                <button type="button" data-quick-feedback="okay">一般，但能懂</button>
+                <button type="button" data-quick-feedback="confusing">没太懂/不准</button>
+              </div>
+              <div class="quick-feedback-tags" aria-label="可选改进方向">
+                <button type="button" data-quick-feedback-tag="scenario">场景更真实</button>
+                <button type="button" data-quick-feedback-tag="scoring">评分更准</button>
+                <button type="button" data-quick-feedback-tag="voice">语音更稳</button>
+                <button type="button" data-quick-feedback-tag="more-scenes">更多场景</button>
+              </div>
+              <label class="quick-feedback-note">
+                想补一句也可以（可不写）
+                <textarea id="quickFeedbackText" rows="2" maxlength="400" placeholder="比如：这个场景太短 / 评分挺准 / 我想练租房看房"></textarea>
+              </label>
+              <button class="secondary-button" id="quickFeedbackSubmitButton" type="button">提交补充</button>
+              <p class="form-status" id="quickFeedbackStatus" role="status"></p>
+            </div>
+
             <div class="result-actions">
               <button class="primary-button" id="tryAnotherButton" type="button">再来一个场景</button>
               <button class="secondary-button" id="retryButton" type="button">重玩本场景</button>

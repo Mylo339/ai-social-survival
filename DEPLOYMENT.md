@@ -43,6 +43,17 @@ AI_MODEL=model-name
 
 Never place an API key in browser code or commit it to the repository.
 
+For DeepSeek, use the OpenAI-compatible chat endpoint:
+
+```text
+AI_ENDPOINT=https://api.deepseek.com/chat/completions
+AI_API_KEY=your-deepseek-api-key
+AI_MODEL=deepseek-v4-flash
+AI_THINKING=disabled
+```
+
+Keep the key in Render environment variables only. After enabling it, verify `/api/status` shows `online-ai`, then complete at least one practice and one challenge scene before sharing the build.
+
 ## Release verification
 
 ```powershell

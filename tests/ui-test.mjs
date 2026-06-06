@@ -8,6 +8,7 @@ const app = await readFile(new URL("app.js", root), "utf8");
 
 assert.ok(html.includes("Web Beta"), "formal web beta identity should be visible");
 assert.ok(html.includes('id="sceneFilter"'), "scene library should expose a category filter");
+assert.ok(html.includes('id="quickFeedbackCard"'), "result page should ask for lightweight feedback");
 assert.ok(html.includes("场景预览"), "hero should explain the preview without alarm language");
 assert.ok(html.includes("场景复盘"), "results should use calm, clear language");
 
@@ -23,5 +24,6 @@ assert.ok(css.includes("@media (prefers-reduced-motion: reduce)"), "motion shoul
 
 assert.ok(app.includes('document.querySelector("#chatView").dataset.temperature'), "relationship state should drive UI styling");
 assert.ok(app.includes('document.querySelector("#resultView").dataset.ending'), "ending state should drive report styling");
+assert.ok(app.includes("quick_feedback_submitted"), "quick feedback should be tracked as a product signal");
 
 console.log("UI test passed: calm web-beta identity, state-driven visuals, filtering, and accessibility hooks are present.");

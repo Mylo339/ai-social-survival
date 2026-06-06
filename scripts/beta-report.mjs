@@ -38,6 +38,8 @@ printCounts("Campaigns", report.byCampaign);
 printCounts("Usage by mode", report.byMode);
 printCounts("Viewport buckets", report.byViewport);
 printCounts("Feedback categories", report.feedbackCategories);
+printCounts("Quick feedback ratings", report.feedbackRatings);
+printCounts("Quick feedback tags", report.feedbackTags);
 
 console.log("\nScene breakdown");
 if (!report.sceneBreakdown.length) {
@@ -56,7 +58,9 @@ if (!report.sceneBreakdown.length) {
 if (feedback.length) {
   console.log("\nMost recent feedback");
   report.recentFeedback.forEach((item) => {
-    console.log(`  [${item.createdAt}] ${item.category} / ${item.sceneId || "no scene"} / ${item.source}`);
+    const tags = item.tags?.length ? ` / tags: ${item.tags.join(",")}` : "";
+    const rating = item.rating ? ` / rating: ${item.rating}` : "";
+    console.log(`  [${item.createdAt}] ${item.category}${rating} / ${item.sceneId || "no scene"} / ${item.source}${tags}`);
     console.log(`  ${item.text}`);
   });
 }

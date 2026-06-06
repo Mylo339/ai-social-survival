@@ -65,11 +65,16 @@ try {
       text: "Server test feedback",
       sceneId: "coffee",
       mode: "practice",
+      rating: "useful",
+      tags: ["scoring", "scenario"],
       analytics: { visitorId: "visitor-test", sessionId: "session-test", source: "server_test" },
     }),
   });
   assert.equal(feedback.status, 201);
-  assert.ok((await readFile(join(dataDirectory, "feedback.ndjson"), "utf8")).includes("Server test feedback"));
+  const feedbackFile = await readFile(join(dataDirectory, "feedback.ndjson"), "utf8");
+  assert.ok(feedbackFile.includes("Server test feedback"));
+  assert.ok(feedbackFile.includes("useful"));
+  assert.ok(feedbackFile.includes("scoring"));
 
   const validEvent = await fetch(`${origin}/api/event`, {
     method: "POST",
@@ -113,6 +118,8 @@ try {
   assert.equal(reportPayload.totals.uniqueVisitors, 1);
   assert.equal(reportPayload.totals.sceneCompletions, 1);
   assert.equal(reportPayload.bySource.server_test, 1);
+  assert.equal(reportPayload.feedbackRatings.useful, 1);
+  assert.equal(reportPayload.feedbackTags.scoring, 1);
 
   const offlineAi = await fetch(`${origin}/api/turn`, {
     method: "POST",

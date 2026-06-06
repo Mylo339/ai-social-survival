@@ -47,6 +47,17 @@ AI_MODEL=model-name
 
 接口需要兼容常见的 chat-completions 请求和 `choices[0].message.content` 响应格式。未配置时，`/api/status` 会明确返回本地教练模式。
 
+DeepSeek 可用以下服务端变量接入：
+
+```text
+AI_ENDPOINT=https://api.deepseek.com/chat/completions
+AI_API_KEY=your-deepseek-api-key
+AI_MODEL=deepseek-v4-flash
+AI_THINKING=disabled
+```
+
+`AI_THINKING` 是可选项；只在目标供应商支持 DeepSeek/OpenAI 兼容的 thinking 参数时使用。为了角色扮演回复更快、更短，公开测试默认建议先用 `disabled`。
+
 ## 数据与隐私
 
 - 对话、历史和收藏默认保存在浏览器本机。
