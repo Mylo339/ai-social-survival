@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
-const html = await readFile("E:/CodexProjects/ai-social-survival/index.html", "utf8");
-const css = await readFile("E:/CodexProjects/ai-social-survival/styles.css", "utf8");
-const manifest = JSON.parse(await readFile("E:/CodexProjects/ai-social-survival/manifest.webmanifest", "utf8"));
+const root = new URL("../", import.meta.url);
+const html = await readFile(new URL("index.html", root), "utf8");
+const css = await readFile(new URL("styles.css", root), "utf8");
+const manifest = JSON.parse(await readFile(new URL("manifest.webmanifest", root), "utf8"));
 
 const ids = [...html.matchAll(/\sid="([^"]+)"/g)].map((match) => match[1]);
 assert.equal(ids.length, new Set(ids).size, "HTML IDs should be unique");

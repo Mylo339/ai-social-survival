@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { createHarness } from "./harness.mjs";
 
+const root = new URL("../", import.meta.url);
 const { app, document } = await createHarness();
 const ids = new Set(app.scenes.map((scene) => scene.id));
 const indexes = new Set(app.scenes.map((scene) => scene.index));
@@ -34,7 +35,7 @@ assert.ok(document.querySelector("#sceneGrid").innerHTML.includes("临时请求�
 assert.ok(!document.querySelector("#sceneGrid").innerHTML.includes("第一次点 Flat White"));
 
 for (const asset of ["index.html", "styles.css", "app.js", "privacy.html", "terms.html", "manifest.webmanifest", "sw.js", "icon.svg"]) {
-  const content = await readFile(`E:/CodexProjects/ai-social-survival/${asset}`, "utf8");
+  const content = await readFile(new URL(asset, root), "utf8");
   assert.ok(content.length > 20, `${asset} should be present and non-empty`);
 }
 

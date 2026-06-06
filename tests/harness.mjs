@@ -177,7 +177,7 @@ export async function createHarness({ voice = false } = {}) {
   };
 
   context.globalThis = context;
-  const appSource = await readFile("E:/CodexProjects/ai-social-survival/app.js", "utf8");
+  const appSource = await readFile(new URL("../app.js", import.meta.url), "utf8");
   const exportHarness = `
 globalThis.__appTest = {
   scenes,

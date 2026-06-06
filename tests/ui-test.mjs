@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
-const html = await readFile("E:/CodexProjects/ai-social-survival/index.html", "utf8");
-const css = await readFile("E:/CodexProjects/ai-social-survival/styles.css", "utf8");
-const app = await readFile("E:/CodexProjects/ai-social-survival/app.js", "utf8");
+const root = new URL("../", import.meta.url);
+const html = await readFile(new URL("index.html", root), "utf8");
+const css = await readFile(new URL("styles.css", root), "utf8");
+const app = await readFile(new URL("app.js", root), "utf8");
 
 assert.ok(html.includes("Web Beta"), "formal web beta identity should be visible");
 assert.ok(html.includes('id="sceneFilter"'), "scene library should expose a category filter");

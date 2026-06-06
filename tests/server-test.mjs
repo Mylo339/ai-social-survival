@@ -4,6 +4,9 @@ import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawn } from "node:child_process";
+import { fileURLToPath } from "node:url";
+
+const projectRoot = fileURLToPath(new URL("../", import.meta.url));
 
 const reservePort = () =>
   new Promise((resolve, reject) => {
@@ -19,7 +22,7 @@ const dataDirectory = await mkdtemp(join(tmpdir(), "social-survival-server-test-
 const port = await reservePort();
 const origin = `http://127.0.0.1:${port}`;
 const child = spawn(process.execPath, ["local-server.mjs"], {
-  cwd: "E:/CodexProjects/ai-social-survival",
+  cwd: projectRoot,
   env: { ...process.env, PORT: String(port), DATA_DIRECTORY: dataDirectory },
   stdio: "ignore",
 });
