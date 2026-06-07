@@ -1135,7 +1135,7 @@ function evaluateTurn(text, turn, scene = state.currentScene) {
 
   let relevance = signalHits.length ? 78 + Math.min(signalHits.length * 6, 18) : wordCount >= 5 ? 35 : 20;
   let goal = goalHits.length ? 74 + Math.min(goalHits.length * 7, 20) : wordCount >= 6 ? 38 : 24;
-  let relationship = 68;
+  let relationship = 76;
   let naturalness = 70;
 
   if (!hasEnglish) {
@@ -1147,6 +1147,7 @@ function evaluateTurn(text, turn, scene = state.currentScene) {
   if (softenerHits.length) relationship += Math.min(softenerHits.length * 8, 18);
   if (riskyHits.length) relationship -= Math.min(riskyHits.length * 28, 50);
   if (directHits.length && !softenerHits.length) relationship -= Math.min(directHits.length * 6, 15);
+  if (/\?/.test(text) && !riskyHits.length) relationship += 6;
   if (wordCount <= 2) {
     naturalness -= 20;
     relationship -= 8;
@@ -1198,7 +1199,100 @@ function evaluateTurn(text, turn, scene = state.currentScene) {
     confidence: signalHits.length ? "中等" : "较低",
     goalText: turn.goal,
     sceneId: scene?.id || "",
+    source: "local",
   };
+}
+
+function normalizeRemoteEvaluation(payload, fallback, turn, scene) {
+  const scoreKeys = ["goal", "relevance", "relationship", "naturalness"];
+  const evaluation = { ...fallback, source: "ai" };
+  scoreKeys.forEach((key) => {
+    const value = Number(payload?.[key]);
+    evaluation[key] = Number.isFinite(value) ? clamp(Math.round(value), 0, 100) : fallback[key];
+  });
+  const overall = Number(payload?.overall);
+  evaluation.overall = Number.isFinite(overall)
+    ? clamp(Math.round(overall), 0, 100)
+    : Math.round(
+        evaluation.goal * 0.34 +
+          evaluation.relevance * 0.26 +
+          evaluation.relationship * 0.24 +
+          evaluation.naturalness * 0.16,
+      );
+  evaluation.shouldRetry = parseBooleanish(payload?.shouldRetry);
+  evaluation.inferredTone = ["polite", "casual", "confident", "impatient"].includes(payload?.inferredTone)
+    ? payload.inferredTone
+    : fallback.inferredTone;
+  evaluation.summary = cleanCoachText(payload?.summary, fallback.summary, 80);
+  evaluation.reason = cleanCoachText(
+    payload?.reason,
+    "AI 按当前人物关系、对方刚问的问题和这句话能否自然推进对话来判断，而不是按固定关键词扣分。",
+    360,
+  );
+  evaluation.strength = cleanCoachText(payload?.strength, fallback.strength, 80);
+  evaluation.improvement = cleanCoachText(payload?.improvement, fallback.improvement, 160);
+  evaluation.suggestion = cleanCoachText(payload?.suggestion, fallback.suggestion || chooseSuggestion(turn, state.currentTone), 240);
+  const hpDelta = Number(payload?.hpDelta);
+  evaluation.hpDelta = Number.isFinite(hpDelta)
+    ? clamp(Math.round(hpDelta), -18, 10)
+    : clamp(Math.round((evaluation.relationship - 68) / 5 + (evaluation.relevance - 58) / 14), -18, 8);
+  evaluation.confidence = cleanCoachText(payload?.confidence, "AI", 20);
+  evaluation.goalText = turn.goal;
+  evaluation.sceneId = scene?.id || "";
+  return evaluation;
+}
+
+function parseBooleanish(value) {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === "true") return true;
+    if (normalized === "false") return false;
+  }
+  return Boolean(value);
+}
+
+function cleanCoachText(value, fallback, maxLength) {
+  return typeof value === "string" && value.trim() ? value.replace(/\s+/g, " ").trim().slice(0, maxLength) : fallback;
+}
+
+async function getTurnEvaluation({ scene, turn, userText, fallback }) {
+  if (state.engine !== "ai" || !state.apiAvailable) return fallback;
+
+  try {
+    const response = await fetch("/api/evaluate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        scene: {
+          id: scene.id,
+          title: scene.title,
+          mission: scene.mission,
+          persona: scene.persona,
+        },
+        turn: {
+          goal: turn.goal,
+          prompt: turn.prompt,
+          repair: turn.repair,
+        },
+        userText,
+        selectedTone: state.currentTone,
+        localEstimate: {
+          goal: fallback.goal,
+          relevance: fallback.relevance,
+          relationship: fallback.relationship,
+          naturalness: fallback.naturalness,
+          shouldRetry: fallback.shouldRetry,
+        },
+      }),
+    });
+    if (!response.ok) throw new Error("AI evaluation unavailable");
+    updateEngineBadges();
+    return normalizeRemoteEvaluation(await response.json(), fallback, turn, scene);
+  } catch (error) {
+    updateEngineBadges("AI 评分暂时退回本地，角色回应仍在线");
+    return fallback;
+  }
 }
 
 function chooseSuggestion(turn, selectedTone, inferredTone) {
@@ -1261,7 +1355,9 @@ async function handleUserMessage(text) {
   addMessage(cleanText, "user");
   messageInput.value = "";
 
-  const evaluation = evaluateTurn(cleanText, turn, scene);
+  const localEvaluation = evaluateTurn(cleanText, turn, scene);
+  if (state.engine === "ai" && state.apiAvailable) sendButton.textContent = "AI 判断中…";
+  const evaluation = await getTurnEvaluation({ scene, turn, userText: cleanText, fallback: localEvaluation });
   state.lastEvaluation = evaluation;
   const attemptNumber = (state.retryCounts[state.turnIndex] || 0) + 1;
   const retry = evaluation.shouldRetry && attemptNumber <= 1;
@@ -1280,6 +1376,7 @@ async function handleUserMessage(text) {
   updateProgress();
   quickReplies.innerHTML = "";
 
+  sendButton.textContent = state.engine === "ai" ? "角色回应中…" : "发送中…";
   const npcResponse = await getNpcResponse({ scene, turn, evaluation, retry, userText: cleanText });
   addMessage(npcResponse, "npc");
 
@@ -1928,7 +2025,7 @@ async function detectApiStatus() {
 }
 
 function updateEngineBadges(message = "") {
-  const text = message || (state.engine === "ai" ? "在线 AI + 透明教练估算" : "本地教练估算 · 不发送对话");
+  const text = message || (state.engine === "ai" ? "在线 AI 场景 + AI 真实语境评分" : "本地备用评分 · 不发送对话");
   document.querySelector("#homeEngineBadge").textContent = text;
   document.querySelector("#chatEngineBadge").textContent = text;
 }

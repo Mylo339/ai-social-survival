@@ -133,6 +133,12 @@ try {
     body: "{}",
   });
   assert.equal(offlineAi.status, 503);
+  const offlineEvaluation = await fetch(`${origin}/api/evaluate`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: "{}",
+  });
+  assert.equal(offlineEvaluation.status, 503);
 
   assert.equal((await fetch(`${origin}/missing-page`)).status, 404);
   assert.equal((await fetch(`${origin}/api/status`, { method: "DELETE" })).status, 405);

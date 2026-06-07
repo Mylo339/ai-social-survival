@@ -5,7 +5,7 @@ const { app, document } = await createHarness();
 
 assert.equal(app.scenes.length, 8, "should expose eight web beta scenarios");
 assert.ok(document.querySelector("#sceneGrid").innerHTML.includes("Can you keep it down?"));
-assert.ok(document.querySelector("#homeEngineBadge").textContent.includes("本地教练"));
+assert.ok(document.querySelector("#homeEngineBadge").textContent.includes("本地备用评分"));
 
 app.startScene("roommate");
 assert.ok(document.querySelector("#toneGrid").innerHTML.includes("不耐烦版"));

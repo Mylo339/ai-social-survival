@@ -87,6 +87,16 @@ function cleanBoolean(value) {
   return Boolean(value);
 }
 
+function cleanAiBoolean(value) {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === "true") return true;
+    if (normalized === "false") return false;
+  }
+  return Boolean(value);
+}
+
 function readPositiveIntegerEnv(name, fallback, min, max) {
   const value = Number(process.env[name]);
   if (!Number.isFinite(value) || value <= 0) return fallback;
@@ -108,6 +118,10 @@ function cleanScores(scores) {
 
 function cleanStringArray(value, maxItems = 8, maxLength = 40) {
   return Array.isArray(value) ? value.slice(0, maxItems).map((item) => cleanString(item, maxLength)).filter(Boolean) : [];
+}
+
+function cleanTone(value) {
+  return ["polite", "casual", "confident", "impatient"].includes(value) ? value : "casual";
 }
 
 function cleanEventDetails(details) {
@@ -275,6 +289,156 @@ async function handleAdminReport(request, response) {
   send(response, 200, buildUsageReport(events, feedback));
 }
 
+function buildAiRequestBody({ temperature, maxTokens, messages }) {
+  const providerRequestBody = {
+    model: aiModel,
+    temperature,
+    max_tokens: maxTokens,
+    messages,
+  };
+  if (["enabled", "disabled"].includes(aiThinking)) {
+    providerRequestBody.thinking = { type: aiThinking };
+  }
+  return providerRequestBody;
+}
+
+async function requestAiContent(providerRequestBody) {
+  const providerResponse = await fetch(aiEndpoint, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${aiApiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(providerRequestBody),
+  });
+
+  if (!providerResponse.ok) throw new Error("AI provider request failed");
+
+  const providerPayload = await providerResponse.json();
+  const content = cleanString(providerPayload.choices?.[0]?.message?.content, 4000);
+  if (!content) throw new Error("AI provider returned no content");
+  return content;
+}
+
+function parseJsonObject(text) {
+  const cleaned = text.replace(/^```(?:json)?/i, "").replace(/```$/i, "").trim();
+  try {
+    return JSON.parse(cleaned);
+  } catch (error) {
+    const start = cleaned.indexOf("{");
+    const end = cleaned.lastIndexOf("}");
+    if (start === -1 || end === -1 || end <= start) throw error;
+    return JSON.parse(cleaned.slice(start, end + 1));
+  }
+}
+
+function sanitizeAiEvaluation(raw, userText) {
+  const source = raw && typeof raw === "object" ? raw : {};
+  const goal = cleanNumber(source.goal, 0, 100);
+  const relevance = cleanNumber(source.relevance, 0, 100);
+  const relationship = cleanNumber(source.relationship, 0, 100);
+  const naturalness = cleanNumber(source.naturalness, 0, 100);
+  const overall = cleanNumber(
+    source.overall || Math.round(goal * 0.34 + relevance * 0.26 + relationship * 0.24 + naturalness * 0.16),
+    0,
+    100,
+  );
+  const shouldRetry = cleanAiBoolean(source.shouldRetry);
+  return {
+    goal,
+    relevance,
+    relationship,
+    naturalness,
+    overall,
+    shouldRetry,
+    inferredTone: cleanTone(source.inferredTone),
+    summary: cleanString(source.summary, 80) || (shouldRetry ? "还没有接住当前问题" : "真实场景里可以继续"),
+    reason:
+      cleanString(source.reason, 360) ||
+      "这次判断基于当前人物关系、对方刚问的问题、回答是否自然推进对话，而不是固定关键词。",
+    strength: cleanString(source.strength, 80) || "对话能继续推进",
+    improvement: cleanString(source.improvement, 160) || "下一句可以更具体地接住对方刚刚问的点。",
+    suggestion: cleanString(source.suggestion, 240) || userText,
+    hpDelta: cleanNumber(source.hpDelta, -18, 10),
+    confidence: cleanString(source.confidence, 20) || "中等",
+    source: "ai",
+  };
+}
+
+async function handleAiEvaluation(request, response) {
+  if (!aiEnabled) {
+    send(response, 503, { error: "Online AI is not configured" });
+    return;
+  }
+  if (!allowRequest(request, aiTurnRateLimit)) {
+    send(response, 429, { error: "Too many requests" });
+    return;
+  }
+
+  const payload = await readJson(request);
+  const sceneTitle = cleanString(payload.scene?.title, 120);
+  const mission = cleanString(payload.scene?.mission, 400);
+  const personaName = cleanString(payload.scene?.persona?.name, 80);
+  const personaRole = cleanString(payload.scene?.persona?.role, 240);
+  const prompt = cleanString(payload.turn?.prompt, 500);
+  const goalText = cleanString(payload.turn?.goal, 300);
+  const repair = cleanString(payload.turn?.repair, 300);
+  const userText = cleanString(payload.userText, 500);
+  const selectedTone = cleanTone(payload.selectedTone);
+
+  if (!sceneTitle || !prompt || !goalText || !userText) {
+    send(response, 400, { error: "Missing evaluation context" });
+    return;
+  }
+  if (containsUnsafeContent(userText)) {
+    send(response, 400, { error: "This request cannot be used for the roleplay exercise" });
+    return;
+  }
+
+  const systemPrompt = [
+    "You are an expert conversation coach for Chinese international students practicing real-life New Zealand English.",
+    "Evaluate whether the learner's line works in this exact roleplay moment, not whether it matches fixed keywords.",
+    "Be generous to short, normal, friendly conversational English when it answers the question or naturally keeps small talk moving.",
+    "Do not punish a casual line just because it lacks please, sorry, or formal wording. Politeness depends on context.",
+    "Only lower relationship meaningfully for lines that are dismissive, rude, evasive, demanding, blaming, or socially cold in this situation.",
+    "Set shouldRetry=true only if the learner is unrelated, mostly non-English, unsafe, refuses the task, or misses a concrete required answer.",
+    "Use Chinese for summary, reason, strength, and improvement. Use natural English for suggestion.",
+    "Return only a JSON object with: goal, relevance, relationship, naturalness, overall, shouldRetry, inferredTone, summary, reason, strength, improvement, suggestion, hpDelta, confidence.",
+  ].join("\n");
+
+  const userPrompt = [
+    `Scenario: ${sceneTitle}`,
+    `Mission: ${mission}`,
+    `Character: ${personaName || "roleplay character"}${personaRole ? `, ${personaRole}` : ""}`,
+    `Selected tone style: ${selectedTone}`,
+    `Current character line: ${prompt}`,
+    `Learner's task this turn: ${goalText}`,
+    repair ? `Repair question if truly needed: ${repair}` : "",
+    `Learner replied: ${userText}`,
+    "",
+    "Calibration example: In a class small-talk scene, 'Yeah, I am. How are you finding it?' is friendly and natural. It should not be marked socially cold.",
+    "Score bands: 90-100 excellent for this moment; 75-89 works naturally; 60-74 understandable but could be warmer/clearer; below 60 only when it creates real friction or misses the moment.",
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  try {
+    const content = await requestAiContent(
+      buildAiRequestBody({
+        temperature: 0.15,
+        maxTokens: 520,
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userPrompt },
+        ],
+      }),
+    );
+    send(response, 200, sanitizeAiEvaluation(parseJsonObject(content), userText));
+  } catch (error) {
+    send(response, 502, { error: "AI evaluation failed" });
+  }
+}
+
 async function handleAiTurn(request, response) {
   if (!aiEnabled) {
     send(response, 503, { error: "Online AI is not configured" });
@@ -321,41 +485,21 @@ async function handleAiTurn(request, response) {
     .filter(Boolean)
     .join("\n");
 
-  const providerRequestBody = {
-    model: aiModel,
-    temperature: 0.65,
-    max_tokens: 140,
-    messages: [
-      { role: "system", content: systemPrompt },
-      { role: "user", content: `Character asked: ${prompt}\nLearner replied: ${userText}` },
-    ],
-  };
-  if (["enabled", "disabled"].includes(aiThinking)) {
-    providerRequestBody.thinking = { type: aiThinking };
-  }
-
-  const providerResponse = await fetch(aiEndpoint, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${aiApiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(providerRequestBody),
-  });
-
-  if (!providerResponse.ok) {
+  try {
+    const reply = await requestAiContent(
+      buildAiRequestBody({
+        temperature: 0.65,
+        maxTokens: 140,
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: `Character asked: ${prompt}\nLearner replied: ${userText}` },
+        ],
+      }),
+    );
+    send(response, 200, { reply: cleanString(reply, 1200) });
+  } catch (error) {
     send(response, 502, { error: "AI provider request failed" });
-    return;
   }
-
-  const providerPayload = await providerResponse.json();
-  const reply = cleanString(providerPayload.choices?.[0]?.message?.content, 1200);
-  if (!reply) {
-    send(response, 502, { error: "AI provider returned no reply" });
-    return;
-  }
-
-  send(response, 200, { reply });
 }
 
 async function serveStatic(url, response) {
@@ -406,6 +550,10 @@ const server = createServer(async (request, response) => {
     }
     if (request.method === "GET" && url.pathname === "/api/admin/report") {
       await handleAdminReport(request, response);
+      return;
+    }
+    if (request.method === "POST" && url.pathname === "/api/evaluate") {
+      await handleAiEvaluation(request, response);
       return;
     }
     if (request.method === "POST" && url.pathname === "/api/turn") {

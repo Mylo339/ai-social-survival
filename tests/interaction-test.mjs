@@ -30,6 +30,13 @@ const polite = app.evaluateTurn("Could I please get a flat white?", app.state.cu
 assert.ok(polite.relationship > rude.relationship, "actual wording, not selected tone label, should drive relationship score");
 assert.ok(polite.goal >= 70);
 
+app.startScene("smalltalk");
+const naturalSmallTalk = app.evaluateTurn("Yeah, I am. How are you finding it?", app.state.currentScene.turns[0]);
+assert.equal(naturalSmallTalk.shouldRetry, false);
+assert.ok(naturalSmallTalk.relationship >= 78, "friendly small talk should not be treated as socially cold");
+assert.ok(naturalSmallTalk.naturalness >= 78, "normal casual English should be scored as natural in context");
+
+app.startScene("coffee");
 await app.handleUserMessage("Could I please get a flat white?");
 await app.handleUserMessage("A medium size, please.");
 await app.handleUserMessage("Oat milk, please.");
