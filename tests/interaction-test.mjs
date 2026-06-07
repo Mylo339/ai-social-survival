@@ -125,8 +125,8 @@ const { app: shortConfirmationApp } = await createHarness({
               overall: 48,
               shouldRetry: true,
               inferredTone: "casual",
-              summary: "Too short",
-              reason: "Too short",
+              summary: "???,????",
+              reason: "???,????????",
               strength: "Relevant",
               improvement: "Add a follow-up.",
               suggestion: "Yeah, I am. How are you finding it?",
@@ -148,5 +148,7 @@ await shortConfirmationApp.handleUserMessage("Yeah.");
 assert.equal(shortConfirmationApp.state.turnIndex, 1, "bare identity confirmation should continue with modest coaching");
 assert.equal(shortConfirmationApp.state.answers[0].evaluation.shouldRetry, false);
 assert.ok(shortConfirmationApp.state.answers[0].evaluation.goal >= 64);
+assert.equal(shortConfirmationApp.state.answers[0].evaluation.summary.includes("?"), false);
+assert.equal(shortConfirmationApp.state.answers[0].evaluation.reason.includes("?"), false);
 
 console.log("Interaction test passed: voice transcript, all scenes and tones, wording-based evaluation, one-call online AI, history, phrasebook, and sharing.");

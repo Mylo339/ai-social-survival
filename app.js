@@ -1275,6 +1275,9 @@ function parseBooleanish(value) {
 function cleanCoachText(value, fallback, maxLength) {
   if (typeof value !== "string" || !value.trim()) return fallback;
   const normalized = value.replace(/\s+/g, " ").trim();
+  const questionMarks = normalized.match(/\?/g)?.length || 0;
+  const hasReadableText = /[\p{Script=Han}a-zA-Z0-9]/u.test(normalized);
+  if (!hasReadableText || questionMarks >= 4 || /\?{3,}/.test(normalized)) return fallback;
   if (normalized.length <= maxLength) return normalized;
   return `${normalized.slice(0, Math.max(0, maxLength - 3)).replace(/[ ,.;:!?，。；：！？、]+$/u, "")}...`;
 }
