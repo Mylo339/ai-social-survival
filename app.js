@@ -1104,6 +1104,16 @@ function countWords(text) {
   return text.match(/[a-zA-Z]+(?:'[a-zA-Z]+)?/g)?.length || 0;
 }
 
+function allowsBareConfirmation(goalText) {
+  return /确认|身份|是否|在不在|yes\/no|answer whether/i.test(goalText || "");
+}
+
+function isBareConfirmation(text) {
+  return /^(yeah|yep|yes|yup|nah|no|nope|i am|i'm|i do|i don't|i did|i didn't|sure|kind of|sort of)[.!?]*$/i.test(
+    normalizeText(text || ""),
+  );
+}
+
 function inferTone(text) {
   const lower = normalizeText(text);
   if (/(whatever|obviously|i don't care|give me|you said that|not that loud|just work faster|it's on my cv)/.test(lower)) {
@@ -1190,6 +1200,7 @@ function evaluateTurn(text, turn, scene = state.currentScene) {
     riskyHits,
     unnaturalHits,
     wordCount,
+    rawText: text,
     summary,
     reason,
     strength,
@@ -1211,6 +1222,15 @@ function normalizeRemoteEvaluation(payload, fallback, turn, scene) {
     evaluation[key] = Number.isFinite(value) ? clamp(Math.round(value), 0, 100) : fallback[key];
   });
   evaluation.shouldRetry = parseBooleanish(payload?.shouldRetry);
+  const bareConfirmation =
+    countWords(normalizeText(fallback.rawText || "")) <= 2 && isBareConfirmation(fallback.rawText || "");
+  if (bareConfirmation && allowsBareConfirmation(turn.goal) && evaluation.relevance >= 50) {
+    evaluation.shouldRetry = false;
+    evaluation.relevance = Math.max(evaluation.relevance, 72);
+    evaluation.goal = Math.min(74, Math.max(evaluation.goal, 64));
+    evaluation.relationship = Math.max(evaluation.relationship, 68);
+    evaluation.naturalness = Math.max(evaluation.naturalness, 62);
+  }
   if (!evaluation.shouldRetry && evaluation.relevance >= 70 && evaluation.goal < 50) {
     evaluation.goal = Math.min(95, Math.max(78, evaluation.relevance - 4));
   }
@@ -1253,7 +1273,10 @@ function parseBooleanish(value) {
 }
 
 function cleanCoachText(value, fallback, maxLength) {
-  return typeof value === "string" && value.trim() ? value.replace(/\s+/g, " ").trim().slice(0, maxLength) : fallback;
+  if (typeof value !== "string" || !value.trim()) return fallback;
+  const normalized = value.replace(/\s+/g, " ").trim();
+  if (normalized.length <= maxLength) return normalized;
+  return `${normalized.slice(0, Math.max(0, maxLength - 3)).replace(/[ ,.;:!?，。；：！？、]+$/u, "")}...`;
 }
 
 async function getTurnEvaluation({ scene, turn, userText, fallback }) {

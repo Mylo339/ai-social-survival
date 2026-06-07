@@ -77,6 +77,14 @@ function cleanString(value, maxLength) {
   return typeof value === "string" ? value.replace(/\0/g, "").trim().slice(0, maxLength) : "";
 }
 
+function cleanCoachString(value, fallback, maxLength) {
+  if (typeof value !== "string" || !value.trim()) return fallback;
+  const normalized = value.replace(/\s+/g, " ").trim();
+  if (normalized.length <= maxLength) return normalized;
+  const sliced = normalized.slice(0, Math.max(0, maxLength - 3)).replace(/[ ,.;:!?，。；：！？、]+$/u, "");
+  return `${sliced}...`;
+}
+
 function cleanNumber(value, min = 0, max = 100_000_000) {
   const number = Number(value);
   if (!Number.isFinite(number)) return 0;
@@ -131,6 +139,16 @@ function cleanTone(value) {
 function needsMoreThanShortConfirmation(goalText) {
   return /寒暄|观点|经验|主动|介绍|来意|疑问|方案|下一步|请求|回应噪音|承认|约定|表达意向|自我介绍|说明相关/i.test(
     goalText,
+  );
+}
+
+function allowsBareConfirmation(goalText) {
+  return /确认|身份|是否|在不在|yes\/no|answer whether/i.test(goalText);
+}
+
+function isBareConfirmation(text) {
+  return /^(yeah|yep|yes|yup|nah|no|nope|i am|i'm|i do|i don't|i did|i didn't|sure|kind of|sort of)[.!?]*$/i.test(
+    cleanString(text, 80),
   );
 }
 
@@ -361,13 +379,22 @@ function parseJsonObject(text) {
 function sanitizeAiEvaluation(raw, { userText, goalText, localEstimate = {} }) {
   const source = raw && typeof raw === "object" ? raw : {};
   let shouldRetry = cleanAiBoolean(source.shouldRetry);
-  const relevance = cleanNumber(source.relevance, 0, 100);
+  let relevance = cleanNumber(source.relevance, 0, 100);
   let goal = cleanNumber(source.goal, 0, 100);
   let relationship = cleanNumber(source.relationship, 0, 100);
   let naturalness = cleanNumber(source.naturalness, 0, 100);
   const wordCount = countEnglishWords(userText);
   const veryShort = wordCount <= 2;
   const risky = hasRiskySocialMove(userText);
+  const bareConfirmation = veryShort && isBareConfirmation(userText);
+
+  if (bareConfirmation && allowsBareConfirmation(goalText) && relevance >= 50 && !risky) {
+    shouldRetry = false;
+    relevance = Math.max(relevance, 72);
+    goal = Math.min(74, Math.max(goal, 64));
+    relationship = Math.max(relationship, 68);
+    naturalness = Math.max(naturalness, 62);
+  }
 
   if (!shouldRetry && relevance >= 70 && goal < 50) {
     goal = Math.min(95, Math.max(78, relevance - 4));
@@ -416,18 +443,21 @@ function sanitizeAiEvaluation(raw, { userText, goalText, localEstimate = {} }) {
     summary:
       veryShort && needsMoreThanShortConfirmation(goalText) && !shouldRetry
         ? "能接上，但这句太短，对方还需要继续带话题"
-        : cleanString(source.summary, 80) || (shouldRetry ? "还没有接住当前问题" : "真实场景里可以继续"),
+        : cleanCoachString(source.summary, shouldRetry ? "还没有接住当前问题" : "真实场景里可以继续", 80),
     reason:
-      cleanString(source.reason, 360) ||
-      "这次判断基于当前人物关系、对方刚问的问题、回答是否自然推进对话，而不是固定关键词。",
-    strength: cleanString(source.strength, 80) || "对话能继续推进",
+      cleanCoachString(
+        source.reason,
+        "这次判断基于当前人物关系、对方刚问的问题、回答是否自然推进对话，而不是固定关键词。",
+        360,
+      ),
+    strength: cleanCoachString(source.strength, "对话能继续推进", 80),
     improvement:
       veryShort && needsMoreThanShortConfirmation(goalText) && !shouldRetry
         ? "补半句自己的感受或反问，让对话不用靠对方硬接。"
-        : cleanString(source.improvement, 160) || "下一句可以更具体地接住对方刚刚问的点。",
+        : cleanCoachString(source.improvement, "下一句可以更具体地接住对方刚刚问的点。", 160),
     suggestion: cleanString(source.suggestion, 240) || userText,
     hpDelta: cleanNumber(source.hpDelta, -18, 10),
-    confidence: cleanString(source.confidence, 20) || "中等",
+    confidence: cleanCoachString(source.confidence, "中等", 20),
     source: "ai",
   };
 }
@@ -469,11 +499,12 @@ async function handleAiEvaluation(request, response) {
     "Be generous to short, normal, friendly conversational English when it answers the question or naturally keeps small talk moving.",
     "Do not punish a casual line just because it lacks please, sorry, or formal wording. Politeness depends on context.",
     "Do not over-reward one-word yes/no answers in small talk, teamwork, conflict, interview, or reflective tasks. They may be relevant but often need a follow-up detail.",
+    "For a simple identity-confirmation turn, a bare answer such as 'Yeah.' can be allowed to continue, but it should get modest scores and coaching to add a follow-up.",
     "If a task asks the learner to adjust behavior, apologise, agree a next step, or take responsibility, refusing or minimising the issue means goal should be low even when relevance is high.",
     "Only lower relationship meaningfully for lines that are dismissive, rude, evasive, demanding, blaming, or socially cold in this situation.",
     "Set shouldRetry=true only if the learner is unrelated, mostly non-English, unsafe, refuses the task, or misses a concrete required answer.",
     "All four score fields must be 0-100 numbers. If shouldRetry=false, goal is usually 70 or higher because the learner has done enough to continue.",
-    "Use Chinese for summary, reason, strength, and improvement. Use natural English for suggestion.",
+    "Use concise Simplified Chinese for summary, reason, strength, improvement, and confidence. Use natural English for suggestion.",
     "Return only a JSON object with: goal, relevance, relationship, naturalness, overall, shouldRetry, inferredTone, summary, reason, strength, improvement, suggestion, hpDelta, confidence.",
   ].join("\n");
 
@@ -489,6 +520,7 @@ async function handleAiEvaluation(request, response) {
     `Local backup estimate for calibration only: goal ${localEstimate.goal}, relevance ${localEstimate.relevance}, relationship ${localEstimate.relationship}, naturalness ${localEstimate.naturalness}.`,
     "",
     "Calibration example: In a class small-talk scene, 'Yeah, I am. How are you finding it?' is friendly and natural. It should not be marked socially cold.",
+    "Calibration example: In a simple identity-confirmation turn, 'Yeah.' is relevant but thin. It should usually continue with lower/moderate scores, not be treated as rude or unrelated.",
     "Score bands: 90-100 excellent for this moment; 75-89 works naturally; 60-74 understandable but could be warmer/clearer; below 60 only when it creates real friction or misses the moment.",
   ]
     .filter(Boolean)
@@ -548,9 +580,11 @@ async function handleAiCoachedTurn(request, response) {
     "First evaluate the learner's line in this exact moment. Then write the character's next reply.",
     "Evaluate natural conversation progress, not fixed keywords. Be fair to normal casual English.",
     "Do not over-reward one-word yes/no answers in small talk, teamwork, conflict, interview, or reflective tasks.",
+    "For a simple identity-confirmation turn, a bare answer such as 'Yeah.' can continue with modest scores; do not mark it as rude or unrelated.",
     "If the learner refuses, minimises, blames, or dodges a request that requires adjustment or responsibility, goal should be low.",
     "The character reply must be natural New Zealand English, under 45 words, and must not mention scores, grading, rubrics, or coaching.",
     "If shouldRetry is true, the character should gently clarify and end with the repair question. Otherwise, react briefly and continue toward the next prompt.",
+    "Use concise Simplified Chinese for evaluation summary, reason, strength, improvement, and confidence. Use natural English for suggestion.",
     "Return only a JSON object with keys: evaluation and reply. evaluation must contain goal, relevance, relationship, naturalness, overall, shouldRetry, inferredTone, summary, reason, strength, improvement, suggestion, hpDelta, confidence.",
   ].join("\n");
 
@@ -566,7 +600,7 @@ async function handleAiCoachedTurn(request, response) {
     `Learner replied: ${userText}`,
     `Local backup estimate for calibration only: goal ${localEstimate.goal}, relevance ${localEstimate.relevance}, relationship ${localEstimate.relationship}, naturalness ${localEstimate.naturalness}.`,
     "",
-    "Calibration: 'Yeah, I am. How are you finding it?' in a class small-talk scene is friendly and natural. 'Yeah.' is relevant but thin. 'Whatever, it is not that loud' in a noise complaint is socially risky and does not complete the adjustment goal.",
+    "Calibration: 'Yeah, I am. How are you finding it?' in a class small-talk scene is friendly and natural. 'Yeah.' is relevant but thin and can continue with modest scores. 'Whatever, it is not that loud' in a noise complaint is socially risky and does not complete the adjustment goal.",
   ].join("\n");
 
   try {

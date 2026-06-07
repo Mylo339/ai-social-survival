@@ -108,4 +108,45 @@ assert.ok(onlineRequests.some((url) => url.includes("/api/coached-turn")));
 assert.equal(onlineRequests.some((url) => url.includes("/api/evaluate")), false);
 assert.equal(onlineRequests.some((url) => url.includes("/api/turn")), false);
 
+const shortConfirmationRequests = [];
+const { app: shortConfirmationApp } = await createHarness({
+  fetch: async (url) => {
+    shortConfirmationRequests.push(String(url));
+    if (String(url).includes("/api/coached-turn")) {
+      return {
+        ok: true,
+        async json() {
+          return {
+            evaluation: {
+              goal: 40,
+              relevance: 60,
+              relationship: 45,
+              naturalness: 50,
+              overall: 48,
+              shouldRetry: true,
+              inferredTone: "casual",
+              summary: "Too short",
+              reason: "Too short",
+              strength: "Relevant",
+              improvement: "Add a follow-up.",
+              suggestion: "Yeah, I am. How are you finding it?",
+              hpDelta: -4,
+              confidence: "medium",
+            },
+            reply: "Nice. I'm still trying to figure out what the brief actually wants.",
+          };
+        },
+      };
+    }
+    throw new Error(`Unexpected request: ${url}`);
+  },
+});
+shortConfirmationApp.state.apiAvailable = true;
+shortConfirmationApp.state.engine = "ai";
+shortConfirmationApp.startScene("smalltalk");
+await shortConfirmationApp.handleUserMessage("Yeah.");
+assert.equal(shortConfirmationApp.state.turnIndex, 1, "bare identity confirmation should continue with modest coaching");
+assert.equal(shortConfirmationApp.state.answers[0].evaluation.shouldRetry, false);
+assert.ok(shortConfirmationApp.state.answers[0].evaluation.goal >= 64);
+
 console.log("Interaction test passed: voice transcript, all scenes and tones, wording-based evaluation, one-call online AI, history, phrasebook, and sharing.");
