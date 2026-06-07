@@ -1210,16 +1210,16 @@ function normalizeRemoteEvaluation(payload, fallback, turn, scene) {
     const value = Number(payload?.[key]);
     evaluation[key] = Number.isFinite(value) ? clamp(Math.round(value), 0, 100) : fallback[key];
   });
-  const overall = Number(payload?.overall);
-  evaluation.overall = Number.isFinite(overall)
-    ? clamp(Math.round(overall), 0, 100)
-    : Math.round(
-        evaluation.goal * 0.34 +
-          evaluation.relevance * 0.26 +
-          evaluation.relationship * 0.24 +
-          evaluation.naturalness * 0.16,
-      );
   evaluation.shouldRetry = parseBooleanish(payload?.shouldRetry);
+  if (!evaluation.shouldRetry && evaluation.relevance >= 70 && evaluation.goal < 50) {
+    evaluation.goal = Math.min(95, Math.max(78, evaluation.relevance - 4));
+  }
+  evaluation.overall = Math.round(
+    evaluation.goal * 0.34 +
+      evaluation.relevance * 0.26 +
+      evaluation.relationship * 0.24 +
+      evaluation.naturalness * 0.16,
+  );
   evaluation.inferredTone = ["polite", "casual", "confident", "impatient"].includes(payload?.inferredTone)
     ? payload.inferredTone
     : fallback.inferredTone;

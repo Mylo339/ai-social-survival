@@ -334,16 +334,27 @@ function parseJsonObject(text) {
 
 function sanitizeAiEvaluation(raw, userText) {
   const source = raw && typeof raw === "object" ? raw : {};
-  const goal = cleanNumber(source.goal, 0, 100);
-  const relevance = cleanNumber(source.relevance, 0, 100);
-  const relationship = cleanNumber(source.relationship, 0, 100);
-  const naturalness = cleanNumber(source.naturalness, 0, 100);
-  const overall = cleanNumber(
-    source.overall || Math.round(goal * 0.34 + relevance * 0.26 + relationship * 0.24 + naturalness * 0.16),
-    0,
-    100,
-  );
   const shouldRetry = cleanAiBoolean(source.shouldRetry);
+  const relevance = cleanNumber(source.relevance, 0, 100);
+  let goal = cleanNumber(source.goal, 0, 100);
+  let relationship = cleanNumber(source.relationship, 0, 100);
+  let naturalness = cleanNumber(source.naturalness, 0, 100);
+
+  if (!shouldRetry && relevance >= 70 && goal < 50) {
+    goal = Math.min(95, Math.max(78, relevance - 4));
+  }
+  if (shouldRetry) {
+    goal = Math.min(goal, 55);
+    relationship = Math.min(relationship, 76);
+  }
+  if (!shouldRetry && relationship < 55 && !/(whatever|obviously|give me|i don't care|not that loud|you said that)/i.test(userText)) {
+    relationship = 72;
+  }
+  if (!shouldRetry && naturalness < 60 && /\b(yeah|yep|yes|i am|i'm|how are you|what do you think)\b/i.test(userText)) {
+    naturalness = 78;
+  }
+
+  const overall = Math.round(goal * 0.34 + relevance * 0.26 + relationship * 0.24 + naturalness * 0.16);
   return {
     goal,
     relevance,
@@ -402,6 +413,7 @@ async function handleAiEvaluation(request, response) {
     "Do not punish a casual line just because it lacks please, sorry, or formal wording. Politeness depends on context.",
     "Only lower relationship meaningfully for lines that are dismissive, rude, evasive, demanding, blaming, or socially cold in this situation.",
     "Set shouldRetry=true only if the learner is unrelated, mostly non-English, unsafe, refuses the task, or misses a concrete required answer.",
+    "All four score fields must be 0-100 numbers. If shouldRetry=false, goal is usually 70 or higher because the learner has done enough to continue.",
     "Use Chinese for summary, reason, strength, and improvement. Use natural English for suggestion.",
     "Return only a JSON object with: goal, relevance, relationship, naturalness, overall, shouldRetry, inferredTone, summary, reason, strength, improvement, suggestion, hpDelta, confidence.",
   ].join("\n");
