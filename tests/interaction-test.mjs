@@ -64,4 +64,48 @@ assert.ok(document.querySelector("#phrasebookList").innerHTML.includes("flat whi
 await app.copyShareText();
 assert.ok(context.__copiedText.includes("教练估算"));
 
-console.log("Interaction test passed: voice transcript, all scenes and tones, wording-based evaluation, history, phrasebook, and sharing.");
+const onlineRequests = [];
+const { app: onlineApp } = await createHarness({
+  fetch: async (url) => {
+    onlineRequests.push(String(url));
+    if (String(url).includes("/api/status")) {
+      return { ok: true, async json() { return { aiEnabled: true, mode: "online-ai" }; } };
+    }
+    if (String(url).includes("/api/coached-turn")) {
+      return {
+        ok: true,
+        async json() {
+          return {
+            evaluation: {
+              goal: 92,
+              relevance: 94,
+              relationship: 90,
+              naturalness: 91,
+              overall: 92,
+              shouldRetry: false,
+              inferredTone: "casual",
+              summary: "真实场景里自然推进",
+              reason: "回应了对方，也自然抛回问题。",
+              strength: "自然接话",
+              improvement: "继续保持。",
+              suggestion: "Yeah, I am. How are you finding it?",
+              hpDelta: 5,
+              confidence: "高",
+            },
+            reply: "Yeah, it is a bit confusing, but we can work it out.",
+          };
+        },
+      };
+    }
+    throw new Error(`Unexpected request: ${url}`);
+  },
+});
+onlineApp.state.apiAvailable = true;
+onlineApp.state.engine = "ai";
+onlineApp.startScene("smalltalk");
+await onlineApp.handleUserMessage("Yeah, I am. How are you finding it?");
+assert.ok(onlineRequests.some((url) => url.includes("/api/coached-turn")));
+assert.equal(onlineRequests.some((url) => url.includes("/api/evaluate")), false);
+assert.equal(onlineRequests.some((url) => url.includes("/api/turn")), false);
+
+console.log("Interaction test passed: voice transcript, all scenes and tones, wording-based evaluation, one-call online AI, history, phrasebook, and sharing.");

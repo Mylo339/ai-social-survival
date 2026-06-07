@@ -139,6 +139,12 @@ try {
     body: "{}",
   });
   assert.equal(offlineEvaluation.status, 503);
+  const offlineCoachedTurn = await fetch(`${origin}/api/coached-turn`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: "{}",
+  });
+  assert.equal(offlineCoachedTurn.status, 503);
 
   assert.equal((await fetch(`${origin}/missing-page`)).status, 404);
   assert.equal((await fetch(`${origin}/api/status`, { method: "DELETE" })).status, 405);

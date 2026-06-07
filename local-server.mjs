@@ -120,8 +120,34 @@ function cleanStringArray(value, maxItems = 8, maxLength = 40) {
   return Array.isArray(value) ? value.slice(0, maxItems).map((item) => cleanString(item, maxLength)).filter(Boolean) : [];
 }
 
+function countEnglishWords(text) {
+  return cleanString(text, 1000).match(/[a-zA-Z]+(?:'[a-zA-Z]+)?/g)?.length || 0;
+}
+
 function cleanTone(value) {
   return ["polite", "casual", "confident", "impatient"].includes(value) ? value : "casual";
+}
+
+function needsMoreThanShortConfirmation(goalText) {
+  return /寒暄|观点|经验|主动|介绍|来意|疑问|方案|下一步|请求|回应噪音|承认|约定|表达意向|自我介绍|说明相关/i.test(
+    goalText,
+  );
+}
+
+function hasRiskySocialMove(text) {
+  return /\b(whatever|obviously|give me|i don't care|you said that|not that loud|just work faster|it's on my cv)\b/i.test(
+    text,
+  );
+}
+
+function refusesAdjustment(text) {
+  return /\b(whatever|not that loud|i don't care|no way|that's your problem|you said that)\b/i.test(text);
+}
+
+function commitsToAdjustment(text) {
+  return /\b(sorry|lower|turn it down|quiet|quieter|headphones|stop|keep it down|few minutes|right now|i'll|i will)\b/i.test(
+    text,
+  );
 }
 
 function cleanEventDetails(details) {
@@ -332,16 +358,40 @@ function parseJsonObject(text) {
   }
 }
 
-function sanitizeAiEvaluation(raw, userText) {
+function sanitizeAiEvaluation(raw, { userText, goalText, localEstimate = {} }) {
   const source = raw && typeof raw === "object" ? raw : {};
-  const shouldRetry = cleanAiBoolean(source.shouldRetry);
+  let shouldRetry = cleanAiBoolean(source.shouldRetry);
   const relevance = cleanNumber(source.relevance, 0, 100);
   let goal = cleanNumber(source.goal, 0, 100);
   let relationship = cleanNumber(source.relationship, 0, 100);
   let naturalness = cleanNumber(source.naturalness, 0, 100);
+  const wordCount = countEnglishWords(userText);
+  const veryShort = wordCount <= 2;
+  const risky = hasRiskySocialMove(userText);
 
   if (!shouldRetry && relevance >= 70 && goal < 50) {
     goal = Math.min(95, Math.max(78, relevance - 4));
+  }
+  if (!shouldRetry && veryShort && needsMoreThanShortConfirmation(goalText)) {
+    goal = Math.min(goal, 72);
+    relationship = Math.min(relationship, 78);
+    naturalness = Math.min(naturalness, 72);
+  }
+  if (risky) {
+    relationship = Math.min(relationship, 42);
+    naturalness = Math.min(naturalness, 65);
+    if (refusesAdjustment(userText) && !commitsToAdjustment(userText)) {
+      goal = Math.min(goal, 45);
+      shouldRetry = true;
+    } else {
+      goal = Math.min(goal, 76);
+    }
+  }
+  if (Number.isFinite(localEstimate.relationship) && localEstimate.relationship > 0 && localEstimate.relationship < 50) {
+    relationship = Math.min(relationship, cleanNumber(localEstimate.relationship, 0, 100) + 12);
+  }
+  if (Number.isFinite(localEstimate.naturalness) && localEstimate.naturalness > 0 && veryShort && needsMoreThanShortConfirmation(goalText)) {
+    naturalness = Math.min(naturalness, cleanNumber(localEstimate.naturalness, 0, 100) + 16);
   }
   if (shouldRetry) {
     goal = Math.min(goal, 55);
@@ -363,12 +413,18 @@ function sanitizeAiEvaluation(raw, userText) {
     overall,
     shouldRetry,
     inferredTone: cleanTone(source.inferredTone),
-    summary: cleanString(source.summary, 80) || (shouldRetry ? "还没有接住当前问题" : "真实场景里可以继续"),
+    summary:
+      veryShort && needsMoreThanShortConfirmation(goalText) && !shouldRetry
+        ? "能接上，但这句太短，对方还需要继续带话题"
+        : cleanString(source.summary, 80) || (shouldRetry ? "还没有接住当前问题" : "真实场景里可以继续"),
     reason:
       cleanString(source.reason, 360) ||
       "这次判断基于当前人物关系、对方刚问的问题、回答是否自然推进对话，而不是固定关键词。",
     strength: cleanString(source.strength, 80) || "对话能继续推进",
-    improvement: cleanString(source.improvement, 160) || "下一句可以更具体地接住对方刚刚问的点。",
+    improvement:
+      veryShort && needsMoreThanShortConfirmation(goalText) && !shouldRetry
+        ? "补半句自己的感受或反问，让对话不用靠对方硬接。"
+        : cleanString(source.improvement, 160) || "下一句可以更具体地接住对方刚刚问的点。",
     suggestion: cleanString(source.suggestion, 240) || userText,
     hpDelta: cleanNumber(source.hpDelta, -18, 10),
     confidence: cleanString(source.confidence, 20) || "中等",
@@ -396,6 +452,7 @@ async function handleAiEvaluation(request, response) {
   const repair = cleanString(payload.turn?.repair, 300);
   const userText = cleanString(payload.userText, 500);
   const selectedTone = cleanTone(payload.selectedTone);
+  const localEstimate = cleanScores(payload.localEstimate);
 
   if (!sceneTitle || !prompt || !goalText || !userText) {
     send(response, 400, { error: "Missing evaluation context" });
@@ -411,6 +468,8 @@ async function handleAiEvaluation(request, response) {
     "Evaluate whether the learner's line works in this exact roleplay moment, not whether it matches fixed keywords.",
     "Be generous to short, normal, friendly conversational English when it answers the question or naturally keeps small talk moving.",
     "Do not punish a casual line just because it lacks please, sorry, or formal wording. Politeness depends on context.",
+    "Do not over-reward one-word yes/no answers in small talk, teamwork, conflict, interview, or reflective tasks. They may be relevant but often need a follow-up detail.",
+    "If a task asks the learner to adjust behavior, apologise, agree a next step, or take responsibility, refusing or minimising the issue means goal should be low even when relevance is high.",
     "Only lower relationship meaningfully for lines that are dismissive, rude, evasive, demanding, blaming, or socially cold in this situation.",
     "Set shouldRetry=true only if the learner is unrelated, mostly non-English, unsafe, refuses the task, or misses a concrete required answer.",
     "All four score fields must be 0-100 numbers. If shouldRetry=false, goal is usually 70 or higher because the learner has done enough to continue.",
@@ -427,6 +486,7 @@ async function handleAiEvaluation(request, response) {
     `Learner's task this turn: ${goalText}`,
     repair ? `Repair question if truly needed: ${repair}` : "",
     `Learner replied: ${userText}`,
+    `Local backup estimate for calibration only: goal ${localEstimate.goal}, relevance ${localEstimate.relevance}, relationship ${localEstimate.relationship}, naturalness ${localEstimate.naturalness}.`,
     "",
     "Calibration example: In a class small-talk scene, 'Yeah, I am. How are you finding it?' is friendly and natural. It should not be marked socially cold.",
     "Score bands: 90-100 excellent for this moment; 75-89 works naturally; 60-74 understandable but could be warmer/clearer; below 60 only when it creates real friction or misses the moment.",
@@ -445,9 +505,87 @@ async function handleAiEvaluation(request, response) {
         ],
       }),
     );
-    send(response, 200, sanitizeAiEvaluation(parseJsonObject(content), userText));
+    send(response, 200, sanitizeAiEvaluation(parseJsonObject(content), { userText, goalText, localEstimate }));
   } catch (error) {
     send(response, 502, { error: "AI evaluation failed" });
+  }
+}
+
+async function handleAiCoachedTurn(request, response) {
+  if (!aiEnabled) {
+    send(response, 503, { error: "Online AI is not configured" });
+    return;
+  }
+  if (!allowRequest(request, aiTurnRateLimit)) {
+    send(response, 429, { error: "Too many requests" });
+    return;
+  }
+
+  const payload = await readJson(request);
+  const sceneTitle = cleanString(payload.scene?.title, 120);
+  const mission = cleanString(payload.scene?.mission, 400);
+  const personaName = cleanString(payload.scene?.persona?.name, 80);
+  const personaRole = cleanString(payload.scene?.persona?.role, 240);
+  const prompt = cleanString(payload.turn?.prompt, 500);
+  const goalText = cleanString(payload.turn?.goal, 300);
+  const repair = cleanString(payload.turn?.repair, 300);
+  const userText = cleanString(payload.userText, 500);
+  const selectedTone = cleanTone(payload.selectedTone);
+  const successNextPrompt = cleanString(payload.successNextPrompt, 500);
+  const localEstimate = cleanScores(payload.localEstimate);
+
+  if (!sceneTitle || !prompt || !goalText || !userText || !successNextPrompt) {
+    send(response, 400, { error: "Missing coached turn context" });
+    return;
+  }
+  if (containsUnsafeContent(userText)) {
+    send(response, 400, { error: "This request cannot be used for the roleplay exercise" });
+    return;
+  }
+
+  const systemPrompt = [
+    "You are both a realistic New Zealand English roleplay character and a conversation coach for Chinese international students.",
+    "First evaluate the learner's line in this exact moment. Then write the character's next reply.",
+    "Evaluate natural conversation progress, not fixed keywords. Be fair to normal casual English.",
+    "Do not over-reward one-word yes/no answers in small talk, teamwork, conflict, interview, or reflective tasks.",
+    "If the learner refuses, minimises, blames, or dodges a request that requires adjustment or responsibility, goal should be low.",
+    "The character reply must be natural New Zealand English, under 45 words, and must not mention scores, grading, rubrics, or coaching.",
+    "If shouldRetry is true, the character should gently clarify and end with the repair question. Otherwise, react briefly and continue toward the next prompt.",
+    "Return only a JSON object with keys: evaluation and reply. evaluation must contain goal, relevance, relationship, naturalness, overall, shouldRetry, inferredTone, summary, reason, strength, improvement, suggestion, hpDelta, confidence.",
+  ].join("\n");
+
+  const userPrompt = [
+    `Scenario: ${sceneTitle}`,
+    `Mission: ${mission}`,
+    `Character: ${personaName || "roleplay character"}${personaRole ? `, ${personaRole}` : ""}`,
+    `Selected learner tone style: ${selectedTone}`,
+    `Character just asked: ${prompt}`,
+    `Learner's task this turn: ${goalText}`,
+    `Repair question if the learner truly missed the moment: ${repair}`,
+    `Next line/intent if the learner did enough to continue: ${successNextPrompt}`,
+    `Learner replied: ${userText}`,
+    `Local backup estimate for calibration only: goal ${localEstimate.goal}, relevance ${localEstimate.relevance}, relationship ${localEstimate.relationship}, naturalness ${localEstimate.naturalness}.`,
+    "",
+    "Calibration: 'Yeah, I am. How are you finding it?' in a class small-talk scene is friendly and natural. 'Yeah.' is relevant but thin. 'Whatever, it is not that loud' in a noise complaint is socially risky and does not complete the adjustment goal.",
+  ].join("\n");
+
+  try {
+    const content = await requestAiContent(
+      buildAiRequestBody({
+        temperature: 0.22,
+        maxTokens: 720,
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userPrompt },
+        ],
+      }),
+    );
+    const parsed = parseJsonObject(content);
+    const evaluation = sanitizeAiEvaluation(parsed.evaluation || parsed, { userText, goalText, localEstimate });
+    const reply = cleanString(parsed.reply, 1200) || (evaluation.shouldRetry ? repair : successNextPrompt);
+    send(response, 200, { evaluation, reply });
+  } catch (error) {
+    send(response, 502, { error: "AI coached turn failed" });
   }
 }
 
@@ -566,6 +704,10 @@ const server = createServer(async (request, response) => {
     }
     if (request.method === "POST" && url.pathname === "/api/evaluate") {
       await handleAiEvaluation(request, response);
+      return;
+    }
+    if (request.method === "POST" && url.pathname === "/api/coached-turn") {
+      await handleAiCoachedTurn(request, response);
       return;
     }
     if (request.method === "POST" && url.pathname === "/api/turn") {

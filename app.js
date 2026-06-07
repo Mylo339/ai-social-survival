@@ -1295,6 +1295,50 @@ async function getTurnEvaluation({ scene, turn, userText, fallback }) {
   }
 }
 
+async function getOnlineCoachedTurn({ scene, turn, userText, fallback }) {
+  if (state.engine !== "ai" || !state.apiAvailable) return null;
+
+  try {
+    const response = await fetch("/api/coached-turn", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        scene: {
+          id: scene.id,
+          title: scene.title,
+          mission: scene.mission,
+          persona: scene.persona,
+        },
+        turn: {
+          goal: turn.goal,
+          prompt: turn.prompt,
+          repair: turn.repair,
+        },
+        userText,
+        selectedTone: state.currentTone,
+        successNextPrompt: scene.turns[state.turnIndex + 1]?.prompt || scene.finalReply,
+        localEstimate: {
+          goal: fallback.goal,
+          relevance: fallback.relevance,
+          relationship: fallback.relationship,
+          naturalness: fallback.naturalness,
+          shouldRetry: fallback.shouldRetry,
+        },
+      }),
+    });
+    if (!response.ok) throw new Error("AI coached turn unavailable");
+    const payload = await response.json();
+    const evaluation = normalizeRemoteEvaluation(payload.evaluation, fallback, turn, scene);
+    const reply = cleanCoachText(payload.reply, "", 1200);
+    if (!reply) throw new Error("AI coached turn returned no reply");
+    updateEngineBadges();
+    return { evaluation, reply };
+  } catch (error) {
+    updateEngineBadges("AI 合并判断暂时不可用，已用备用流程");
+    return null;
+  }
+}
+
 function chooseSuggestion(turn, selectedTone, inferredTone) {
   const preferred = selectedTone === "impatient" ? "casual" : selectedTone || inferredTone || "casual";
   return turn.examples[preferred]?.[0] || turn.examples.casual[0];
@@ -1357,7 +1401,8 @@ async function handleUserMessage(text) {
 
   const localEvaluation = evaluateTurn(cleanText, turn, scene);
   if (state.engine === "ai" && state.apiAvailable) sendButton.textContent = "AI 判断中…";
-  const evaluation = await getTurnEvaluation({ scene, turn, userText: cleanText, fallback: localEvaluation });
+  const coachedTurn = await getOnlineCoachedTurn({ scene, turn, userText: cleanText, fallback: localEvaluation });
+  const evaluation = coachedTurn?.evaluation || localEvaluation;
   state.lastEvaluation = evaluation;
   const attemptNumber = (state.retryCounts[state.turnIndex] || 0) + 1;
   const retry = evaluation.shouldRetry && attemptNumber <= 1;
@@ -1377,7 +1422,7 @@ async function handleUserMessage(text) {
   quickReplies.innerHTML = "";
 
   sendButton.textContent = state.engine === "ai" ? "角色回应中…" : "发送中…";
-  const npcResponse = await getNpcResponse({ scene, turn, evaluation, retry, userText: cleanText });
+  const npcResponse = coachedTurn?.reply || (await getNpcResponse({ scene, turn, evaluation, retry, userText: cleanText }));
   addMessage(npcResponse, "npc");
 
   if (state.engine === "ai") {
